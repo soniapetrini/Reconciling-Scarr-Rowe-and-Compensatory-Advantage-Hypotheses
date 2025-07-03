@@ -3,22 +3,59 @@ source("code/funs.R")
 
 
 
+# CONFUSION MATRIX #####################################
+
+ds   <- "WLS"
+outcome   <- "college"
+predictor <- "pgi_education"
+fun_out   <- "median"
+fun_pred  <- "no middle"
+dichot    <- "group"
+
+# Read
+df   <- get_data(ds)
+
+# Split by SES
+df_low <- df %>% filter(SES == "low SES")
+df_high <- df %>% filter(SES == "high SES")
+
+
+# Dichotomize
+df_low   <- dichotomize(df_low,outcome, predictor, fun_out, fun_pred, resid=T)
+df_high <- dichotomize(df_high,outcome, predictor, fun_out, fun_pred, resid=T)
+
+table(df_low$high_PRED, df_low$high_OUT) %>% confusionMatrix(positive="1")
+table(df_high$high_PRED, df_high$high_OUT) %>% confusionMatrix(positive="1")
+
+
+
+
+# PGI DISTRIBUTION by SES #####################################
+
+ds <- "WLS"
+df <- get_data(ds)
+
+df %>% 
+  ggplot(aes(x = pgi_education, fill = SES)) +
+  geom_density(alpha = 0.5) 
+
+
 
 # OUTCOME DISTRIBUTION #####################################
 
-
 group <- "SES"
 
-ds <- "ELSA"
+ds <- "WLS"
 df <- get_data(ds)
 
-outcome   <- "cognitive"
-predictor <- "pgi_cognitive"
+outcome   <- "education"
+predictor <- "pgi_education"
 fun_out   <- "median"
 fun_pred  <- "no middle"
   
 # education by group
-df %>% dichotomize(outcome, predictor, fun_out, fun_pred) %>%
+df %>% group_by(SES) %>%
+  dichotomize(outcome, predictor, fun_out, fun_pred) %>%
   ggplot(aes(x =  factor(high_PRED, levels=c(0,1), labels=c("low PGI","high PGI")), y = get(outcome))) +
   geom_jitter(aes(color = get(group)), width = 0.2, alpha = 0.5) +
   geom_boxplot(alpha = 0.5, width = 0.5) +
@@ -34,24 +71,16 @@ ggsave(paste0("plots/edu_boxplots_",ds,".pdf"), width = 13, height = 10)
 
 
 
-# distribution of PGI by group
-df %>% 
-  ggplot(aes(x = get(outcome), fill = SES)) +
-  geom_density(alpha = 0.5) +
-  labs(x=outcome)
-
-
-
 
 
 
 # BIVARIATE DENSITY
-#devtools::install_github("jtlandis/ggside")
+devtools::install_github("jtlandis/ggside")
 
 library(ggside)
 
-outcome   <- "cognitive"
-predictor <- "pgi_cognitive"
+outcome   <- "education"
+predictor <- "pgi_education"
 fun_out   <- "median"
 fun_pred  <- "no middle"
 
@@ -72,125 +101,17 @@ ggplot(data = df,
 
 
 
-# CHECKIN THINGS #######
-
-ds        <- "ELSA"
-
-outcome   <- "cognitive"
-predictor <- "pgi_cognitive"
-fun_out   <- "median"
-fun_pred  <- "no middle"
-
-print(ds)
-data <- get_data(ds)
-
-
-
-##### High SES
-group1_data <- filter(data, SES == "high SES")
-
-# - predictor
-group1_data %<>% mutate(
-  breaks = cut(get(predictor), 
-               breaks = quantile(get(predictor), probs = c(0,0.4,0.6,1)), 
-               include.lowest = TRUE, labels = FALSE)
-)
-
-group1_data %<>% mutate(high_PRED = case_when(breaks == 1 ~ 0,
-                                       breaks == 2 ~ NA,
-                                       breaks == 3 ~ 1)) %>% na.omit()
-
-
-# - outcome 
-fun_out = get(fun_out)
-thresh  = fun_out(group1_data[[outcome]])
-# Create binary
-print(thresh)
-group1_data %<>% mutate(high_OUT = case_when(get(outcome) > thresh ~ 1, 
-                                             get(outcome) < thresh ~ 0,
-                                             TRUE ~ NA))  %>% na.omit()
-group1_data %<>% mutate(high_OUT = ifelse(get(outcome) >= thresh, 1, 0))
-
-
-
-plot(density(group1_data[[outcome]]))
-summary(group1_data[[outcome]])
-prev_high <- mean(group1_data$high_OUT) %>% round(2)
-print(paste0("high SES prevalence: ", prev_high))
-
-
-
-
-##### Low SES
-group2_data <- filter(data, SES == "low SES")
-
-# - predictor
-group2_data %<>% mutate(
-  breaks = cut(get(predictor), 
-               breaks = quantile(get(predictor), probs = c(0,0.4,0.6,1)), 
-               include.lowest = TRUE, labels = FALSE)
-)
-
-group2_data %<>% mutate(high_PRED = case_when(breaks == 1 ~ 0,
-                                       breaks == 2 ~ NA,
-                                       breaks == 3 ~ 1)) %>% na.omit()
-
-# - outcome 
-thresh  = fun_out(group2_data[[outcome]])
-
-# Create binary
-group2_data %<>% mutate(high_OUT = ifelse(get(outcome) > thresh, 1, 0))
-
-plot(density(group2_data[[outcome]]))
-summary(group2_data[[outcome]])
-prev_low <- mean(group2_data$high_OUT) %>% round(2)
-print(paste0("low SES prevalence: ", prev_low))
-
-
-
-
-# Compute metrics on each
-metric <- "PPV"
-result_group1 <- compute_a_metric(group1_data, metric)
-result_group2 <- compute_a_metric(group2_data, metric)
-
-
-# Test the significance of between-group differences
-p_group1 = result_group1$value * result_group1$n
-p_group2 = result_group2$value * result_group2$n
-
-test_result <- prop.test(x = c(p_group1,        p_group2), 
-                         n = c(result_group1$n, result_group2$n))
-
-# Combine main results
-result_group1 %<>% mutate(group = "high SES", prevalence = prev_high)
-result_group2 %<>% mutate(group = "low SES",  prevalence = prev_low)
-
-results <- rbind.data.frame(result_group1, result_group2) 
-
-
-# Add significance test
-results %>% 
-  mutate(p_value    = test_result$p.value,
-         y_position = max(results$ci_upper) + 0.09,
-         stars      = add_stars(p_value),
-         group_var  = "SES")
-
-
-
-
-
-
-
-
-
-
-
-
 
 # ROC CURVE ##################################################################
 
 library(plotROC)
+
+outcome   <- "education"
+predictor <- "pgi_education"
+fun_out   <- "median"
+fun_pred  <- "no middle"
+dichot    <- "group"
+
 
 plot_roc <- function(df, grouping_var="SES") {
 
@@ -200,7 +121,7 @@ plot_roc <- function(df, grouping_var="SES") {
   # Compute precision and recall
   pr_data <- lapply(groups, function(g) {
     subset_data <- filter(df, SES == g)
-    dichotomize(subset_data)
+    dichotomize(subset_data, outcome, predictor, fun_out, fun_pred)
   })
   
   df_roc <- bind_rows(pr_data)

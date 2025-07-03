@@ -10,11 +10,96 @@ source("code/funs.R")
 
 # PLOT SINGLE DATASET ##########################################################
 
+
+# Settings
+ds      <- "WLS"
+metrics <- c("TPR","TNR")
+outcome   <- "college"
+predictor <- "pgi_education"
+fun_out   <- "median"
+fun_pred  <- "no middle"
+dichot    <- "group"
+
+# Get data
+data <- get_data(ds)
+
+# Compute all metrics
+results <- lapply(metrics, 
+                  compute_group_metrics, 
+                  data=data,
+                  dichot=dichot,
+                  outcome=outcome, predictor=predictor, 
+                  fun_out=fun_out, fun_pred=fun_pred)
+results <- bind_rows(results) %>% mutate(outcome=outcome)
+
+
+# New plot!
+out.lab.pos <- outcome.labs[outcome]
+out.lab.neg <- neg.outcome.labs[outcome]
+
+
+
+# --- Crosstabs
+# TO BUILD WITH TPR AND TNR
+# Add pred and out
+results <- results %>% 
+  mutate(pred = ifelse(metric=="TPR","high PGI","low PGI"),
+         real = ifelse(metric=="TPR",out.lab.pos, out.lab.neg))
+
+# low SES
+counts <- results %>% 
+  select(group, value, ci_lower, ci_upper, n, pred, real) %>%
+  mutate(count       = round(value * n))
+
+complementary <- counts %>%
+  mutate(
+    value    = 1 - value,
+    pred = ifelse(pred == "high PGI", "low PGI", "high PGI"),
+    real = ifelse(real == out.lab.pos, out.lab.pos, out.lab.neg),
+    count = round(value * n)
+  )
+
+counts <- bind_rows(counts, complementary)
+expanded_data <- counts %>% uncount(count)
+
+
+expanded_data$pred <- factor(expanded_data$pred, levels=c("high PGI", "low PGI"))
+
+# Plot
+ggplot(data = expanded_data) +
+  geom_mosaic(aes(x = product(pred, real), fill = pred)) +
+  labs(x="", y="") +
+  geom_hline(yintercept=0.5, linetype="dashed", color="black") +
+  facet_wrap(~group) +
+  theme(legend.position = "bottom") +
+  scale_fill_manual(values=c("violet", "orange"))
+
+
+
+
+
+
+# --- Bars
+# TO BUILD WITH TPR AND FPR
+results <- results %>% mutate(out = ifelse(metric=="TPR", out.lab.pos, out.lab.neg))
+
+# Plot
+plot_rates(results) + facet_wrap(~out, scales="free_x") +
+  ggtitle(paste0(ds))
+
+
+
+
+
+
+
+
+
 # For each dataset
 lapply(c("WLS", "ELSA"), function(ds) {
 
   # Settings
-  metrics <- c("TNR","TPR", "NPV", "PPV")
+  metrics <- c("FNR","FPR")
   outcome   <- "college"
   predictor <- "pgi_education"
   fun_out   <- "median"
@@ -31,26 +116,105 @@ lapply(c("WLS", "ELSA"), function(ds) {
                     dichot=dichot,
                     outcome=outcome, predictor=predictor, 
                     fun_out=fun_out, fun_pred=fun_pred)
-  results <- bind_rows(results)
+  results <- bind_rows(results) %>% mutate(outcome=outcome)
   
   # Plot
-  plot_rates(results) + 
-    ggtitle(paste0(ds, ": ",predictor, " predicts ", outcome.labs[outcome]))
+  p <- plot_rates(results) + 
+    ggtitle(paste0(ds))
     
   
-  # Print results
+  # Print plot and results
+  print(p)
   print(results)
   
-  met_lab    <- ifelse("TNR" %in% metrics, "_rates", "")
-  ggsave(paste0("plots/metrics",met_lab,"_",outcome,"_",predictor,"_",dichot,"_",ds,".jpeg"), width = 10, height = 10)
+  # Save
+  met_lab <- ifelse("TNR" %in% metrics, "_highEA", "_lowEA")
+  ggsave(paste0("plots/error_rates","_",outcome,"_",dichot,"_",ds,".png"), width = 4, height = 4)
+
+  })
+
+
+
+# For each dataset
+res <- lapply(c("WLS", "ELSA"), function(ds) {
+  
+  # Settings
+  metrics <- c("FNR","FPR")
+  outcome   <- "college"
+  predictor <- "pgi_education"
+  fun_out   <- "median"
+  fun_pred  <- "no middle"
+  dichot    <- "group"
+  
+  # Get data
+  data <- get_data(ds)
+  
+  # Compute all metrics
+  results <- lapply(metrics, 
+                    compute_group_metrics, 
+                    data=data,
+                    dichot=dichot,
+                    outcome=outcome, predictor=predictor, 
+                    fun_out=fun_out, fun_pred=fun_pred)
+  bind_rows(results) %>% 
+    mutate(outcome=outcome, dataset=ds)
+  
+})
+
+results <- bind_rows(res) %>% mutate(dataset=factor(dataset, levels=c("WLS","ELSA")))
+
+# Plot
+p <- plot_rates(results) + facet_wrap(~dataset, ncol=2) + theme_gray()
+p
+
+
+
+# For each school level
+
+ds <- "ELSA"
+edu_outcomes <- c("high_school","college","graduate_school")
+
+lapply("high_school", function(out) {
+  
+  # Settings
+  metrics <- c("NPV","PPV")
+  metrics <- c("FNR","FPR")
+  outcome   <- out
+  predictor <- "pgi_education"
+  fun_out   <- "median"
+  fun_pred  <- "no middle"
+  dichot    <- "group"
+  
+  # Get data
+  data <- get_data(ds)
+  
+  # Compute all metrics
+  results <- lapply(metrics, 
+                    compute_group_metrics, 
+                    data=data,
+                    dichot=dichot,
+                    outcome=outcome, predictor=predictor, 
+                    fun_out=fun_out, fun_pred=fun_pred)
+  results <- bind_rows(results) %>% mutate(outcome=outcome)
+  
+  # Plot
+  p <- plot_rates(results) + 
+    ggtitle(paste0(ds,": ", outcome))
+  
+  
+  # Print plot and results
+  print(p)
+  print(results)
+  
+  # Save
+  met_lab <- ifelse("TNR" %in% metrics, "_highEA", "_lowEA")
+  ggsave(paste0("plots/",outcome,"_",dichot,"_",ds,".jpeg"), width = 10, height = 10)
+  
 })
 
 
 
-
-
-
-# PLOT ALL DATASETS  ##########################################################
+ # PLOT ALL DATASETS  ##########################################################
 source("code/funs.R")
 
 metrics <- c("TNR","TPR")
@@ -129,9 +293,13 @@ prev_df
 
 # GENDER ANALYSIS ##########################################################
 
-metrics <- METRICS
-metrics <- c("TNR","TPR")
-label_metrics <- ifelse("PPV" %in% metrics, "", "_rates")
+# Settings
+metrics <- c("FNR","FPR")
+outcome   <- "education"
+predictor <- "pgi_education"
+fun_out   <- "median"
+fun_pred  <- "no middle"
+dichot    <- "group"
 
 
 all_results <- lapply(DATASETS, function(ds) {
@@ -141,8 +309,18 @@ all_results <- lapply(DATASETS, function(ds) {
   data_female <- get_data(ds) %>% filter(sex=="female")
   
   # Compute all metrics
-  results_male   <- lapply(metrics, compute_group_metrics, data=data_male)
-  results_female <- lapply(metrics, compute_group_metrics, data=data_female)
+  results_male   <- lapply(metrics, 
+                           compute_group_metrics, 
+                           data=data_male,
+                           dichot=dichot,
+                           outcome=outcome, predictor=predictor, 
+                           fun_out=fun_out, fun_pred=fun_pred)
+  results_female <- lapply(metrics, 
+                           compute_group_metrics, 
+                           data=data_female,
+                           dichot=dichot,
+                           outcome=outcome, predictor=predictor, 
+                           fun_out=fun_out, fun_pred=fun_pred)
   
   # Combine results for metrics
   results_male   <- do.call(rbind, results_male)   %>% mutate(sex="male")

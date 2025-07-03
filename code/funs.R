@@ -12,6 +12,12 @@ library(PRROC)
 library(magrittr)
 library(ROSE)
 library(sjPlot)
+library(caret)
+library(olsrr)
+library(lmtest)
+library(ggfortify)
+library(ggeffects)
+library(ggmosaic)
 
 
 
@@ -22,26 +28,40 @@ DEMO     = c("birth_year", "sex")
 PC_vars  = paste0("pc",seq(1:10))
 METRICS  = c("NPV","PPV")
 DATASETS = c("WLS","ELSA","SOEP")
-
-
+OUTCOMES = c("education","High_school","college","graduate_school", "heigh")
+bottom_pgi <- 0.40
+top_pgi    <- 0.60
 
 
 # LABELS ####################################################
 metrics.labs <- c(
                   #"NPV" = "Low PGI  ",
                   #"PPV" = "High PGI ",
-                  "NPV" = "Negtaive Predictive\nValue",
+                  "NPV" = "Negative Predictive\nValue",
                   "PPV" = "Positive Predictive\nValue",
-                  "TNR" = "True Negative\nRate",
+                  "TNR" = "P (Low PGI)",
                   "FNR" = "False Negative\nRate",
-                  "TPR" = "True Positive\nRate"
+                  "FPR" = "P (High PGI)",
+                  "TPR" = "P (High PGI)"
                   )
 
-groups.labs <- c("low SES"  = "#fbaca7", "high SES" = "#52d8da")
 
-outcome.labs <- c("education" = "educational attainment",
-                  "cognitive" = "cognitive ability",
-                  "college"   = "college attendancy")
+groups.labs <- c("Low SES"  = "#fbaca7", "High SES" = "#52d8da")
+
+outcome.labs <- c("education"         = "Educational attainment",
+                  "cognitive"         = "Cognitive ability",
+                  "High_school"       = "High School completed",
+                  "college"           = "College",
+                  "graduate_school"   = "Graduate completed"
+                  )
+
+neg.outcome.labs <- c("education"         = "Low Educational attainment",
+                      "cognitive"         = "Low Cognitive ability",
+                      "High_school"       = "High School not completed",
+                      "college"           = "No College",
+                      "graduate_school"   = "Graduate not completed"
+)
+
 
 # FUNCTIONS ####################################################
 
@@ -53,58 +73,45 @@ get_data <- function(ds) readRDS(paste0("data/",ds,"/df.rds"))
 
 add_stars <- function(p_values) {
   # add significance stars
-  ifelse(p_values < 0.01, "***",
-         ifelse(p_values < 0.05, "**",
-                ifelse(p_values < 0.1, "*", "")))
-}
-
-
-
-summary_stats <- function(ds) {
-  # Get data
-  df <- get_data(ds)
-  df <- dichotomize(df)
-  
-  # Summary statistics by group
-  df %>% group_by(SES) %>%
-    summarize(
-      Dataset = ds,
-      n = n(),
-      mean_education = mean(education, na.rm = TRUE),
-      sd_education   = sd(education, na.rm = TRUE),
-      sex            = sum(sex=="female")/n(),
-      mean_yob       = as.integer(mean(birth_year)),
-      sd_yob         = as.integer(sd(birth_year))
-    ) %>% ungroup()
+  ifelse(p_values < 0.001, "***",
+         ifelse(p_values < 0.01, "**",
+                ifelse(p_values < 0.05, "*", "")))
 }
 
 
 
 
+calc_tpr <- function(pred_prob, actual, threshold) {
+  pred_class <- ifelse(pred_prob >= threshold, 1, 0)
+  tp <- sum(pred_class == 1 & actual == 1)
+  fn <- sum(pred_class == 0 & actual == 1)
+  tp / (tp + fn)
+}
+
+# Function to calculate FPR for a given threshold  
+calc_tnr <- function(pred_prob, actual, threshold) {
+  pred_class <- ifelse(pred_prob >= threshold, 1, 0)
+  fp <- sum(pred_class == 1 & actual == 0)
+  tn <- sum(pred_class == 0 & actual == 0)
+  tn / (fp + tn)
+}
 
 
-
-dichotomize <- function(data, 
-                        outcome="education", predictor="pgi_education", 
-                        fun_out="median",    fun_pred ="median", 
-                        resid=T) {
-  
-  cat("outcome: ", outcome, "- threshold:", fun_out, "\n")
-  cat("predictor: ", predictor, "- threshold:", fun_pred,  "\n")
+dichotomize <- function(data, outcome, predictor, fun_out, fun_pred, resid=T) {
   
   # - Residualise out of PGIs
   if (resid) {
-    # Variables
+    # Add control variables
     pcs     = paste(PC_vars, collapse = " + ")
     demo    = paste(DEMO,    collapse = " + ")
-    # Regression
+    # Run regression
     formula <- as.formula(paste(predictor," ~", pcs, " + ", demo))
     model   <- lm(formula, data = data)
     # Residualise and scale
-    data[[predictor]] = as.vector(scale(residuals(model), center = FALSE))
+    data[predictor] = as.vector(scale(residuals(model), center = FALSE))
   } else {
     # Scale
-    data[[predictor]] = as.vector(scale(data[[predictor]], center = FALSE))
+    data[predictor] = as.vector(scale(data[predictor], center = FALSE))
   }
   
   
@@ -113,8 +120,9 @@ dichotomize <- function(data,
     # If middle 20% is removed
     data %<>% mutate(
       breaks = cut(get(predictor), 
-                   breaks = quantile(get(predictor), probs = c(0,0.4,0.6,1)), 
-                   include.lowest = TRUE, labels = FALSE)
+                   breaks = quantile(get(predictor), 
+                                     probs = c(0,bottom_pgi,top_pgi,1)), 
+                   include.Lowest = TRUE, labels = FALSE)
     )
     # Create binary
     data %<>% mutate(high_PRED = case_when(breaks == 1 ~ 0,
@@ -147,7 +155,7 @@ dichotomize <- function(data,
     data %<>% mutate(
       breaks = cut(get(outcome), 
                    breaks = quantile(get(outcome), probs = c(0,0.4,0.6,1)), 
-                   include.lowest = TRUE, labels = FALSE)
+                   include.Lowest = TRUE, labels = FALSE)
     )
     # Create binary
     data %<>% mutate(high_OUT = case_when(breaks == 1 ~ 0,
@@ -182,18 +190,18 @@ calculate_metrics <- function(data, metric) {
   if (metric == "PPV") {
     # Calculate positive predictive value (precision)
     high_PRED_high_OUT <- sum(PGI == 1 & EA == 1)
-    high_PRED         <- sum(PGI == 1)
-    metric_value     <- round(high_PRED_high_OUT / high_PRED, 2)
+    high_PRED          <- sum(PGI == 1)
+    metric_value       <- round(high_PRED_high_OUT / high_PRED, 2)
     num   <- high_PRED_high_OUT
     denom <- high_PRED
     
   } else if (metric == "NPV") {
     # Calculate negative predictive value
-    low_PGI_low_EA <- sum(PGI == 0 & EA == 0)
-    low_PGI        <- sum(PGI == 0)
-    metric_value   <- round(low_PGI_low_EA / low_PGI, 2)
-    num   <- low_PGI_low_EA
-    denom <- low_PGI
+    Low_PGI_Low_EA <- sum(PGI == 0 & EA == 0)
+    Low_PGI        <- sum(PGI == 0)
+    metric_value   <- round(Low_PGI_Low_EA / Low_PGI, 2)
+    num   <- Low_PGI_Low_EA
+    denom <- Low_PGI
     
   } else if (metric == "TPR") {
     # Calculate true positive rate
@@ -205,14 +213,22 @@ calculate_metrics <- function(data, metric) {
     
   } else if (metric == "TNR") {
     # Calculate true negative rate
-    low_PGI_low_EA <- sum(PGI == 0 & EA == 0)
-    low_EA         <- sum(EA == 0)
-    metric_value   <- round(low_PGI_low_EA / low_EA, 2)
-    num   <- low_PGI_low_EA
-    denom <- low_EA
+    Low_PGI_Low_EA <- sum(PGI == 0 & EA == 0)
+    Low_EA         <- sum(EA == 0)
+    metric_value   <- round(Low_PGI_Low_EA / Low_EA, 2)
+    num   <- Low_PGI_Low_EA
+    denom <- Low_EA
     
   } else if (metric == "FNR") {
     # Calculate false negative rate
+    high_PRED_low_OUT <- sum(PGI == 0 & EA == 1)
+    low_OUT           <- sum(EA == 1)
+    metric_value      <- round(high_PRED_low_OUT / low_OUT, 2)
+    num <- high_PRED_low_OUT
+    denom <- low_OUT
+    
+  } else if (metric == "FPR") {
+    # Calculate false positive rate
     high_PRED_low_OUT <- sum(PGI == 1 & EA == 0)
     low_OUT           <- sum(EA == 0)
     metric_value      <- round(high_PRED_low_OUT / low_OUT, 2)
@@ -229,7 +245,7 @@ calculate_metrics <- function(data, metric) {
 
 
 
-# Function to calculate the chosen metric
+# Function to calculate a metric with Wilson CIs
 compute_a_metric <- function(data, metric) {
   
   # Compute metrics
@@ -254,57 +270,55 @@ compute_a_metric <- function(data, metric) {
 
 
 
-compute_group_metrics <- function(data, metric, 
-                                  dichot="whole",
-                                  outcome="education", predictor="pgi_education", 
-                                  fun_out="median",    fun_pred ="median") {
-    
-  # Dichotomize variables on full sample
-  if (dichot=="whole") {
-    data <- dichotomize(data, outcome, predictor, fun_out, fun_pred)
-  }
+compute_group_metrics <- function(data, metric, outcome, predictor, fun_out, fun_pred) {
   
   # Split by group
-  group1_data <- filter(data, SES == "high SES")
-  group2_data <- filter(data, SES == "low SES")
+  High_data <- filter(data, SES == "High SES")
+  Low_data  <- filter(data, SES == "Low SES")
   
-  # Dichotomize variables by group
-  if (dichot=="group") {
-    group1_data <- dichotomize(group1_data, outcome, predictor, fun_out, fun_pred)
-    group2_data <- dichotomize(group2_data, outcome, predictor, fun_out, fun_pred)
-  }
+  # Create binary variables for predictor and outcome 
+  High_data <- dichotomize(High_data, outcome, predictor, fun_out, fun_pred)
+  Low_data  <- dichotomize(Low_data, outcome, predictor, fun_out, fun_pred)
+
+  # Compute prevalence
+  prev_High <- mean(High_data$high_OUT) %>% round(2)
+  prev_Low  <- mean(Low_data$high_OUT) %>% round(2)
   
+  # Compute required metric on each group
+  result_High <- compute_a_metric(High_data, metric)
+  result_Low  <- compute_a_metric(Low_data, metric)
   
-  # Prevalence
-  prev_high <- mean(group1_data$high_OUT) %>% round(2)
-  prev_low  <- mean(group2_data$high_OUT) %>% round(2)
+  # Retreive numerator from proportion and denominator
+  num_High = round(result_High$value * result_High$n)
+  num_Low  = round(result_Low$value * result_Low$n)
   
-  # Compute metrics on each
-  result_group1 <- compute_a_metric(group1_data, metric)
-  result_group2 <- compute_a_metric(group2_data, metric)
+  # Table with counts
+  table_2x2 <- matrix(
+    c(num_High, result_High$n - num_High,
+      num_Low,  result_Low$n  - num_Low),
+    nrow = 2,
+    byrow = TRUE
+  )
   
-  
-  # Test the significance of between-group differences
-  p_group1 = result_group1$value * result_group1$n
-  p_group2 = result_group2$value * result_group2$n
-  
-  test_result <- prop.test(x = c(p_group1,        p_group2), 
-                           n = c(result_group1$n, result_group2$n))
+  ## Fisher's Exact Test  test for the significance of between-group differences
+  test_result <- fisher.test(table_2x2)
   
   # Combine main results
-  result_group1 %<>% mutate(group = "high SES", prevalence = prev_high)
-  result_group2 %<>% mutate(group = "low SES",  prevalence = prev_low)
-  results <- rbind.data.frame(result_group1, result_group2) 
-  
+  result_High %<>% mutate(group = "High SES", prevalence = prev_High)
+  result_Low  %<>% mutate(group = "Low SES",  prevalence = prev_Low)
+  results <- rbind.data.frame(result_High, result_Low) 
   
   # Add significance test
   results %>% 
     mutate(p_value    = test_result$p.value,
-           y_position = max(results$ci_upper) + 0.09,
+           y_position = max(results$ci_upper) + 0.12,
            stars      = add_stars(p_value),
-           group_var  = "SES")
+           group_var  = "SES",
+           outcome    = outcome,
+           predictor  = predictor)
   
 }
+
 
 
 
@@ -319,16 +333,25 @@ compute_all_metrics <- function(data, metrics=METRICS) {
 
 
 
+
+# helper dictionary
+
 plot_rates <- function(results) {
   
   # Get the available metrics from your data
   available_metrics <- unique(results$metric)
-  y_lab <- ifelse("PPV" %in% available_metrics, "Predictive Value\n", "Rate")
+  
+  # Outcome labels
+  out.lab.pos <- outcome.labs[results$outcome]
+  out.lab.neg <- neg.outcome.labs[results$outcome]
+  results <- results %>% mutate(out = ifelse(metric=="TPR", out.lab.pos, out.lab.neg))
+  
   
   # Convert to factors for plotting
   results <- results %>%
     mutate(metric = factor(metric, levels = available_metrics, labels = metrics.labs[available_metrics]),
-           group  = factor(group, levels=c("low SES","high SES")))
+           group  = factor(group, levels=c("Low SES","High SES")))
+
   
   # Create the plot
   ggplot(results, aes(x = metric, y = value, group=group)) +
@@ -337,9 +360,10 @@ plot_rates <- function(results) {
                   color="#747170",
                   position = position_dodge(width = 0.6),
                   width = 0.15, linewidth = 1) +
-    labs(x="", y=y_lab) +
+    # Axis labels
+    labs(x="", y="") +
     # Add value labels left
-    geom_text(data=filter(results, group == "low SES"),
+    geom_text(data=filter(results, group == "Low SES"),
               aes(label = sprintf("%.2f", value)), 
               position = position_dodge(width = 0.6),
               vjust = -2.5,
@@ -347,7 +371,7 @@ plot_rates <- function(results) {
               size = 4,
               color = "black") +
     # Add value label right
-    geom_text(data=filter(results, group == "high SES"),
+    geom_text(data=filter(results, group == "High SES"),
               aes(label = sprintf("%.2f", value)), 
               position = position_dodge(width = 0.6),
               vjust = -2.5,
@@ -359,135 +383,121 @@ plot_rates <- function(results) {
               color = "black",
               size = 8,
               position = position_dodge(width = 0)) +
-    scale_y_continuous(limits = c(0, 1), 
+    # Add secondary axis
+    scale_y_continuous(
+                       #"P (Low PGI | High EA)\n", 
+                       #sec.axis = sec_axis(~ . * 1, 
+                       #                    name = "P (High PGI | Low EA)\n",
+                       #                    breaks = seq(0, 1, 0.2)),
+                       limits = c(0, 1), 
                        breaks = seq(0, 1, 0.2),
-                       labels = scales::label_number(accuracy = 0.1)) +
+                       labels = scales::label_number(accuracy = 0.1)
+                       ) +
     theme_minimal() +
-    theme(text = element_text(size=18),
+    theme(text = element_text(size=15),
+          axis.title.y = element_text(size=12),
           legend.position = "bottom",
-          legend.spacing.x = unit(20.0, 'cm')) +
-    scale_fill_discrete(name="")
+          legend.spacing.x = unit(20.0, 'cm')
+          ) +
+    scale_fill_discrete(name="") +
+    facet_wrap(~out)
 
 }
 
 
 
+plot_perc <- function(results, show_metrics, adjust_pvalues) {
+  
+  # Outcome labels
+  out.lab.pos <- outcome.labs[unique(results$outcome)]
+  out.lab.neg <- neg.outcome.labs[unique(results$outcome)]
 
-create_metrics_table <- function(df) {
+  # Add labels for predicted value (PGI), and real value (EA)
+  results <- results %>% 
+    mutate(real = case_when(metric == "TPR" ~ out.lab.pos,
+                            metric == "TNR" ~ out.lab.neg,
+                            metric == "FPR" ~ out.lab.neg,
+                            metric == "FNR" ~ out.lab.pos,
+                            TRUE            ~ NA_character_)
+    )
   
-  # Calculate metrics for both ds
-  results <- lapply(c("WLS","SOEP"), function(ds) {
-    
-    grouping_var = "SES"
-    df <- readRDS(paste0("data/",ds,"/df.rds"))
-    
-    results <- lapply(METRICS, function(met) {
-      calculate_group_metrics(df, grouping_var, metric = met) %>%
-        mutate(grouping_var = grouping_var)
-    })
-    results <- do.call(rbind, results)
-  })
+  # Indicator of metrics for plot
+  counts <- results %>%
+    mutate(show     = ifelse(metric %in% show_metrics, "1", "0"))
   
-  # Combine all results
-  all_results <- do.call(rbind, results)
+  # Remove values for metrics not shown
+  counts <- counts %>%
+    mutate(value_label = ifelse(metric %in% show_metrics, value, ""))
   
+  # Adjust stars
+  if(adjust_pvalues) counts$stars <- counts$stars.adj
   
-  # Create LaTeX table
-  latex_table <- "\\begin{table}[htbp]
-\\centering
-\\usepackage{makecell}
-\\caption{Group Differences in Classification Metrics}
-\\begin{tabular}{llccc}
-\\toprule
-& & \\multicolumn{2}{c}{\\textbf{Metric}} \\\\
-\\cmidrule(lr){3-4}
-\\textbf{Grouping} & \\textbf{Group} & \\textbf{TPR} & \\textbf{FPR} \\\\
-\\midrule\n"
+  # Remove stars for a random group
+  counts <- counts %>%
+    mutate(stars = ifelse(group == "High SES", "", stars))
   
-  # Add rows for each grouping variable
-  for (ds in c("WLS","SOEP")) {
-    # Get results for this grouping variable
-    results_subset <- all_results[all_results$grouping_var == ds,]
-    groups <- unique(results_subset$group)
-    
-    # Get significance stars
-    tpr_stars <- significance_tests$stars[significance_tests$grouping_var == ds & 
-                                            significance_tests$metric == "TPR"]
-    fpr_stars <- significance_tests$stars[significance_tests$grouping_var == ds & 
-                                            significance_tests$metric == "FPR"]
-    
-    # Add multirow for grouping variable
-    group_label <- if(ds == "sex") {
-      "\\makecell[l]{Biological\\\\Sex}"
-    } else {
-      "\\makecell[l]{Socioeconomic\\\\Status}"
-    }
-    
-    # First row of the group
-    first_group <- groups[1]
-    tpr_row <- results_subset[results_subset$group == first_group & results_subset$metric == "TPR",]
-    fpr_row <- results_subset[results_subset$group == first_group & results_subset$metric == "FPR",]
-    
-    latex_table <- paste0(latex_table,
-                          "\\multirow{2}{*}{", group_label, "} & ",
-                          ifelse(ds == "sex", 
-                                 ifelse(first_group == "male", "Male", "Female"),
-                                 ifelse(first_group == "high SES", "High SES", "Low SES")),
-                          " & ",
-                          sprintf("%.2f", tpr_row$value)," [",
-                          sprintf("%.2f", tpr_row$ci_lower),", ",
-                          sprintf("%.2f", tpr_row$ci_upper),"]",
-                          tpr_stars," & ",
-                          sprintf("%.2f", fpr_row$value)," [",
-                          sprintf("%.2f", fpr_row$ci_lower),", ",
-                          sprintf("%.2f", fpr_row$ci_upper),"]",
-                          fpr_stars," \\\\\n")
-    
-    # Second row of the group
-    second_group <- groups[2]
-    tpr_row <- results_subset[results_subset$group == second_group & results_subset$metric == "TPR",]
-    fpr_row <- results_subset[results_subset$group == second_group & results_subset$metric == "FPR",]
-    
-    latex_table <- paste0(latex_table,
-                          "& ",
-                          ifelse(ds == "sex", 
-                                 ifelse(second_group == "male", "Male", "Female"),
-                                 ifelse(second_group == "high SES", "High SES", "Low SES")),
-                          " & ",
-                          sprintf("%.2f", tpr_row$value)," [",
-                          sprintf("%.2f", tpr_row$ci_lower),", ",
-                          sprintf("%.2f", tpr_row$ci_upper),"] & ",
-                          sprintf("%.2f", fpr_row$value)," [",
-                          sprintf("%.2f", fpr_row$ci_lower),", ",
-                          sprintf("%.2f", fpr_row$ci_upper),"] \\\\\n")
-    
-    # Add midrule between grouping variables
-    if (ds != tail(c("WLS","SOEP"), 1)) {
-      latex_table <- paste0(latex_table, "\\midrule\n")
-    }
-  }
+  # Convert to factors for plotting
+  counts <- counts %>%
+    mutate(group = factor(group, levels = c("Low SES", "High SES")))
   
-  # Close the table
-  latex_table <- paste0(latex_table, "\\bottomrule
-\\end{tabular}
-\\caption*{\\footnotesize Note: Values shown as estimate [95\\% CI]. $^{*}p<0.05$; $^{**}p<0.01$; $^{***}p<0.001$}
-\\end{table}")
+  # Plot  
+  ggplot(counts, aes(fill=group, y=value, x=group, alpha=show)) + 
+    geom_bar(position="fill", stat="identity") +
+    facet_wrap(~real, scales="free_x") +
+    geom_errorbar(data = counts %>% filter(show == 1),
+                  aes(ymin = ci_lower, ymax = ci_upper), 
+                  color="#635856",
+                  width = 0.15, linewidth = 1) +
+    scale_alpha_manual(name="", values=c(0.4, 1)) +
+    # Axis labels
+    labs(x="") +
+    # Value labels
+    geom_text(aes(label = value_label), 
+              vjust = -3.5,
+              size = 6,
+              color = "#635856") +
+    # Add stars
+    geom_text(aes(y=0.9, x=1.5, label = stars),
+              color = "#635856", 
+              size  = 10, inherit.aes = F) +
+    # Add 0.5 line
+    geom_hline(yintercept=0.5, 
+               linetype="dashed", color="black", 
+               alpha=0.6, linewidth=1) +
+    # Add horizontal comparison lines between groups
+    geom_segment(data=filter(counts, stars != ""),
+                 x = 1, xend = 2, y = 0.88, yend = 0.88,
+                 color = "#635856", linewidth = 0.5,
+                 inherit.aes = FALSE) +
+    # Add bracket ends (optional)
+    geom_segment(data=filter(counts, stars != ""),
+                 x = 1, xend = 1, y = 0.86, yend = 0.88,
+                 color = "#635856", linewidth = 0.5,
+                 inherit.aes = FALSE) +
+    geom_segment(data=filter(counts, stars != ""),
+                 x = 2, xend = 2, y = 0.86, yend = 0.88,
+                 color = "#635856", linewidth = 0.5,
+                 inherit.aes = FALSE) +
+    #theme_minimal() +
+    theme(legend.position = "bottom",
+          legend.key.size = unit(2, "lines"),
+          legend.text = element_text(size = 20),
+          axis.text.x = element_blank(),
+          axis.ticks.x  = element_blank(),
+          text            = element_text(size=20),
+          axis.title.y    = element_text(color = "#635856"),
+          strip.text      = element_text(color = "#635856")) +
+    scale_fill_discrete(name="") +
+    guides(alpha = "none") +
+    # Fix axis display
+    scale_y_continuous(limits = c(0, 1), 
+                       name   = paste0("Proportion with PGI in the top ",(1-top_pgi)*100," %\n"),
+                       sec.axis = sec_axis(~ ., 
+                                           name = paste0("Proportion with PGI in the bottom ",(bottom_pgi)*100," %\n"))
+    ) 
   
-  return(latex_table)
 }
 
 
 
-compute_prevalence <- function(df) {
-  sapply(c("high SES","low SES"), function(g) {
-    group_df <- df %>% filter(SES == g)
-    group_df <- group_df %>%
-      dichotomize() %>%
-      group_by(high_OUT) %>%
-      summarize(count = n()) %>% 
-      mutate(prev = count/nrow(group_df))
-    prevalence=round(group_df$prev[group_df$high_OUT==1],2)
-    paste0(g,":",prevalence,"  ")
-    prevalence
-  })
-}
+

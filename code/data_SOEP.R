@@ -19,10 +19,19 @@ bio <- read_dta(paste0(data_dir,"SOEP/raw/is/ppfad.dta")) %>%
 # -- OUTCOMES
 # all income, isei, yoe measurements
 outcomes <- read_dta(paste0(data_dir,"SOEP/raw/is/pgen.dta")) %>%
-  select(pid, education = pgbilzt, occupation = pgisei88, income = pglabgro, syear) %>% 
+  select(pid, syear,
+         education   = pgbilzt, 
+         occupation  = pgisei88, 
+         income      = pglabgro) %>%
+  #mutate(high_school = case_when(
+  #         education <  13 ~ 0,
+  #         education >= 13 ~ 1,
+  #         TRUE ~ education )
+  #       ) %>% 
   mutate(across(c(education, occupation, income), negative_to_na))
 
 
+table(outcomes$high_school)
 
 # -- SES
 # occupation and education
@@ -113,9 +122,7 @@ temp <- select(temp,
                SES, 
                pgi_education, 
                pgi_cognitive,
-               cognitive,
-               #mob, 
-               education, 
+               any_of(OUTCOMES) ,
                any_of(DEMO),
                any_of(PC_vars)
                )

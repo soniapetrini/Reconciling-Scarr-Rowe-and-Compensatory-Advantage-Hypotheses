@@ -36,7 +36,7 @@ data <- data %>%
   mutate(
     race       = z_ie020re, # 1 white, 2 other (we don't need it, but leave it here just in case)
     sex        = z_sexrsp, # 1 male (0), 2 female (1)
-    birth_year =  z_brdxdy # note that birth month is protected characteristic in WLS, but we don't need it
+    birth_year = z_brdxdy # note that birth month is protected characteristic in WLS, but we don't need it
     
   )
 
@@ -46,21 +46,11 @@ data <- data %>% filter(race == 1)
 #--- Parental ages at the time of birth
 data <- data %>%
   mutate(
-    birth_year_mother = ifelse(z_ge051ma  < 0, NA, z_ge051ma), 
-    birth_year_father = ifelse(z_he063fa  < 0, NA, z_he063fa),
-    birth_year        = ifelse(birth_year < 0, NA, birth_year),
-    sex               = case_when(sex == 1 ~ 0, sex == 2 ~ 1, TRUE ~ NA_real_ )) %>% 
-  mutate(
-    mother_age_birth = birth_year- birth_year_mother,
-    father_age_birth = birth_year- birth_year_father)
+    birth_year = ifelse(birth_year < 0, NA, birth_year),
+    sex        = case_when(sex == 1 ~ 0, sex == 2 ~ 1, TRUE ~ NA_real_ )) 
 
 
-#----- Birth order
-data <- data %>%
-  group_by(familyID) %>% 
-  mutate(birth_order = ifelse(rank(birth_year) == 1, 1, 2)) %>% 
-  ungroup()  #
-# Note that birth space is not relevant here because since they are only two siblings it doesn't vary
+
 
 
 
@@ -71,55 +61,73 @@ missing_summary <- data %>%
   summarise(
     valid_yoe_1 = sum(!is.na(z_edeqyr)), # R03 Equivalent years of regular education.
     valid_yoe_2 = sum(!is.na(z_rb004red)), # R04 Summary of equivalent yrs of regular education based on most recent degree.
-    valid_yoe_3 = sum(!is.na(z_gb103red)), # R05 How many years of education does R have based on his or her highest degree?
-    valid_yoe_4 = sum(!is.na(z_mx001rer)) #R06 Summary of equivalent years of regular education based on highest degree.
+    valid_yoe_3 = sum(!is.na(z_gb103red)), # R05 How many years of education does R have based on his or her Highest degree?
+    valid_yoe_4 = sum(!is.na(z_mx001rer)) #R06 Summary of equivalent years of regular education based on Highest degree.
   )
 
 
-EDU      <- c(education_1       = "z_edeqyr",   education_2       = "z_rb004red", education_3      = "z_gb103red", education_4   = "z_hb103red") # years of education
-#OCCU     <- c(occu_3            = "z_ocsxcru2", occu_4            = "sfu57ref") # occupation (measured as 1970 Duncan SEI, note the 1970 because there are more)
-#INC_IND  <- c(income_ind_5      = "z_gp250rec", income_ind_6      = "z_hpu50rec") # individual level income (total personal income)
-#INC      <- c(income_5          = "z_gp260hec", income_6          = "z_hpu60hec") # household level income (total household income)
-#TALL    <- c(heigh = "z_mx010rec")
+# High School
+attributes(data$z_hb103red)
+
+
+
+
+EDU     <- c(education_1  = "z_edeqyr",   education_2  = "z_rb004red", education_3  = "z_gb103red", education_4 = "z_hb103red") # years of education
+INC_IND <- c(income_ind_5 = "z_gp250rec", income_ind_6 = "z_hpu50rec") # individual level income (total personal income)
+TALL    <- c(heigh   = "z_mx010rec")
 COLLEGE <- c(college = "z_hb001re")
 
+
+
 # Rename
-data <- data %>% rename(!!!EDU, !!!COLLEGE)
+data <- data %>% rename(!!!EDU, !!!COLLEGE, !!!TALL, !!!INC_IND)
 
 
 # Clean (sending negative values to NA)
 
 # -- other (all negative)
 data <- data %>%
-  mutate_at(vars(names(EDU), names(COLLEGE)), ~ ifelse(. < 0, NA, .))
+  mutate_at(vars(names(EDU), names(COLLEGE), names(TALL), names(INC_IND)), ~ ifelse(. < 0, NA, .))
 
 
 # Combine averaging to have more stable measures
 data <- data %>%
   mutate(
-    education = rowMeans(select(., all_of(names(EDU))), na.rm=TRUE)
+    education       = rowMeans(select(., all_of(names(EDU))), na.rm=TRUE),
+    High_school     = if_else(education >= 12, 1, 0),
+    college         = if_else(education >= 15, 1, 0),
+    graduate_school = if_else(education >= 17, 1, 0),
+    income          = rowMeans(select(., all_of(names(INC_IND))), na.rm=TRUE)
   )
-
 
 
 
 ########################## SES ######################################
 
-data <- data %>%
-  mutate(
-    father_edu  = if_else(edfa57q  < 0, NA, edfa57q), 
-    father_occu = if_else(bmfoc1u  < 0, NA, bmfoc1u)
-  )
 
-# Scale SES variables
-data <- data %>%
-  mutate(across(all_of(SES_vars), ~scale(.) %>% as.vector))
+# ----- Build from paternal occupation and education
+#data <- data %>%
+#  mutate(
+#    father_edu  = if_else(edfa57q  < 0, NA, edfa57q), 
+#    father_occu = if_else(bmfoc1u  < 0, NA, bmfoc1u)
+#  )
+#
+## Scale SES variables
+#data <- data %>%
+#  mutate(across(all_of(SES_vars), ~scale(.) %>% as.vector))
+#
+## Calculate mean of standardized variables
+#data <- data %>% mutate(SES = rowMeans(select(data, any_of(SES_vars)), na.rm = T))
+#
+## Check
+#summary(select(data,any_of(SES_vars), SES))
 
-# Calculate mean of standardized variables
-data <- data %>% mutate(SES = rowMeans(select(data, any_of(SES_vars)), na.rm = T))
 
-# Check
-summary(select(data,any_of(SES_vars), SES))
+
+# ------ Already available SES index
+
+summary(data$ses57)
+data <- data %>% mutate(SES = ses57)
 
 # Impute siblings' SES
 family_means <- data %>%
@@ -131,6 +139,11 @@ data <- data %>%
   left_join(family_means, by = "familyID") %>%
   mutate(SES = ifelse(is.na(SES), mean_SES, SES)) %>%
   select(-mean_SES)
+
+
+summary(data$SES)
+
+
 
 
 
@@ -163,7 +176,6 @@ pgi_cog <- pgi_cog %>%
   select(
     pgiID,
     pgi_education = pgs_ea3_gwas,
-    pgi_cognitive = pgs_cp_gwas,
     pc1  = pc1_shuffled,
     pc2  = pc2_shuffled,
     pc3  = pc3_shuffled,
@@ -186,18 +198,14 @@ df <- merge(data, pgi_cog, by="pgiID", all.x=TRUE)
 
 ########################## SELECT FINAL VARIABLES  ##########################
 
-OUTCOMES <- c("education","college", "cognitive")
 
 # Select all the relevant variables to extract them from the sample
 df <- df %>%
   select(ID, familyID, withinID, pgiID,   # IDs
-         sex, birth_year, 
          SES, 
-         education,
-         college,
-         cognitive = IQ,
+         any_of(DEMO), 
+         any_of(OUTCOMES),
          pgi_education, 
-         pgi_cognitive,
          any_of(PC_vars)
   )
 
@@ -228,9 +236,12 @@ full <- df %>%
   mutate(
     sex      = if_else(sex == 1, "male", "female"),
     SES_cont = SES,
-    SES      = if_else(SES >= median(SES, na.rm = TRUE), "high SES", "low SES"),
-    college  = if_else(college == 1, 1, 0)
+    SES      = if_else(SES >= median(SES, na.rm = TRUE), "High SES", "Low SES")
+    #SES       = ntile(SES, 3)
   )
+
+full$SES <- factor(full$SES, levels = c("Low SES", "High SES"))
+
 
 # save full data
 saveRDS(full, file="data/WLS/df.rds")
@@ -252,7 +263,7 @@ siblings %<>%
   mutate(
     sex      = if_else(sex == 1, "male", "female"),
     SES_cont = SES,
-    SES      = if_else(SES >= median(SES, na.rm = TRUE), "high SES", "low SES")
+    SES      = if_else(SES >= median(SES, na.rm = TRUE), "High SES", "Low SES")
   )
 
 # --- save siblings data

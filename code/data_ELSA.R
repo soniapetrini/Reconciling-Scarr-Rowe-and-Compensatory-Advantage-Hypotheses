@@ -9,7 +9,7 @@ source("code/funs.R")
 
 # harmonized dataset (provided by ELSA)
 #elsa <- read_dta(paste0(data_dir,"ELSA/raw/h_elsa_g3.dta"))
-elsa <- readRDS(paste0(data_dir,"ELSA/elsa.rds"))
+elsa <- readRDS(paste0(data_dir,"ELSA/raw/elsa.rds"))
 
 #######  PGI data ##################
 
@@ -62,12 +62,12 @@ table(data$raedyrs_e) # original variable years of education
 data <- data %>%
   mutate(education = case_when(
     raedyrs_e <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
-    raedyrs_e == 1 ~ 9,
-    raedyrs_e == 2 ~ 10,
-    raedyrs_e == 3 ~ 11,
-    raedyrs_e == 4 ~ 12,
-    raedyrs_e == 5 ~ 13,
-    raedyrs_e == 6 ~ 14,
+    raedyrs_e == 1 ~ 9, #14, 
+    raedyrs_e == 2 ~ 10, #15, 
+    raedyrs_e == 3 ~ 11, #16, 
+    raedyrs_e == 4 ~ 12, #17, 
+    raedyrs_e == 5 ~ 13, #18, 
+    raedyrs_e == 6 ~ 14, #19, 
     TRUE ~ raedyrs_e  
   )) 
 
@@ -80,16 +80,32 @@ table(data$education)
 table(data$raeduc_e) # original variable 
 
 data <- data %>%
-  mutate(college = case_when(
-    raeduc_e <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
-    raeduc_e %in% c(1,3) ~ 0,
-    raeduc_e %in% c(4,5) ~ 1,
-    TRUE ~ raeduc_e  
-  ))
+  mutate(
+    High_school = case_when(
+      raeduc_e <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
+      raeduc_e %in% c(1) ~ 0,
+      raeduc_e %in% c(3,4,5) ~ 1,
+      TRUE ~ raeduc_e  
+    ),
+    college = case_when(
+      raeduc_e <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
+      raeduc_e %in% c(1,3) ~ 0,
+      raeduc_e %in% c(4,5) ~ 1,
+      TRUE ~ raeduc_e  
+    ),
+    graduate_school = case_when(
+      raeduc_e <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
+      raeduc_e %in% c(1,3,4) ~ 0,
+      raeduc_e %in% c(5) ~ 1,
+      TRUE ~ raeduc_e  
+    )
+  )
 
 table(data$college)
 
+table(data$High_school)
 
+try <- select(data, education, High_school, college)
 
 
 ##################################################
@@ -159,9 +175,9 @@ table(data$raracem) # coded by ELSA as 1 white, 4 non-white
 
 data <- data %>%
          # 1. House ownership
-  mutate(owners = case_when(raown < 0  ~ NA_real_,
-                            raown == 1 ~ 1,
-                            TRUE       ~ 0),
+         mutate(owners = case_when(raown < 0  ~ NA_real_,
+                                   raown == 1 ~ 1,
+                                   TRUE       ~ 0),
          # 2. Number of rooms
          rooms = if_else(raroo < 0, NA_real_, raroo),
          # 3. Facilities
@@ -185,7 +201,6 @@ data <- data %>%
 
 SES_PCA_vars <- c("books", "unemp", "facilities", "rooms", "owners")
 
-OUTCOMES <- c("education","college","cognitive")
 
 # Select variables
 temp <- select(data, 
@@ -247,12 +262,16 @@ merged <- merge(temp, pcs, by="id", all.x=TRUE)
 data <- merged %>%
   mutate(
     SES_cont = SES,
-    SES      = if_else(SES >= median(SES, na.rm = TRUE), "high SES", "low SES")
+    SES      = if_else(SES >= median(SES, na.rm = TRUE), "High SES", "Low SES")
   )
-table(data$SES)
 
-# select final sample
+# Fix levels
+table(data$SES)
+data$SES <- factor(data$SES, levels = c("Low SES", "High SES"))
+
+# Select final sample
 data <- data %>% select(-any_of(SES_PCA_vars))
+
 
 saveRDS(data, file="data/ELSA/df.rds")
 
