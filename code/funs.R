@@ -18,6 +18,7 @@ library(lmtest)
 library(ggfortify)
 library(ggeffects)
 library(ggmosaic)
+library(boot)
 
 
 
@@ -28,7 +29,7 @@ DEMO     = c("birth_year", "sex")
 PC_vars  = paste0("pc",seq(1:10))
 METRICS  = c("NPV","PPV")
 DATASETS = c("WLS","ELSA","SOEP")
-OUTCOMES = c("education","High_school","college","graduate_school", "heigh")
+OUTCOMES = c("education","high_school","college","graduate_school", "heigh")
 bottom_pgi <- 0.40
 top_pgi    <- 0.60
 
@@ -50,14 +51,14 @@ groups.labs <- c("Low SES"  = "#fbaca7", "High SES" = "#52d8da")
 
 outcome.labs <- c("education"         = "Educational attainment",
                   "cognitive"         = "Cognitive ability",
-                  "High_school"       = "High School completed",
+                  "high_school"       = "High School completed",
                   "college"           = "College",
                   "graduate_school"   = "Graduate completed"
                   )
 
 neg.outcome.labs <- c("education"         = "Low Educational attainment",
                       "cognitive"         = "Low Cognitive ability",
-                      "High_school"       = "High School not completed",
+                      "high_school"       = "High School not completed",
                       "college"           = "No College",
                       "graduate_school"   = "Graduate not completed"
 )
@@ -322,14 +323,91 @@ compute_group_metrics <- function(data, metric, outcome, predictor, fun_out, fun
 
 
 
+# IMPLEMENT BOOTSTRAPPING
 
-compute_all_metrics <- function(data, metrics=METRICS) {
-  results_list <- lapply(metrics, compute_group_metrics, data=data)
-  bind_rows(results_list)
+compute_group_metrics_boot <- function(data, metric, outcome, predictor, fun_out, fun_pred, R) {
+  
+  boot_fun <- function(data, indices) {
+    
+    # Boot sample
+    data <- data[indices,]
+    
+    # Create SES var based on boot sample median
+    data <- data %>%
+      mutate(SES = if_else(SES_cont >= median(SES_cont), "High SES", "Low SES"))
+    
+    # Filter by group
+    High_data <- filter(data, SES == "High SES")
+    Low_data  <- filter(data, SES == "Low SES")
+    
+    # Create binary variables for predictor and outcome 
+    High_data <- dichotomize(High_data, outcome, predictor, fun_out, fun_pred)
+    Low_data  <- dichotomize(Low_data, outcome, predictor, fun_out, fun_pred)
+    
+    # Compute all required metrics
+    all_metrics <- lapply(metrics, function(metric) {
+      # Compute required metric on each group
+      metric_Low  <- calculate_metrics(Low_data, metric)$metric
+      metric_High <- calculate_metrics(High_data, metric)$metric
+      c(metric_Low, metric_High, metric_Low-metric_High)
+    })
+  
+    # Return estimates
+    do.call(c, all_metrics)
+  }
+  
+  # Run bootstrapping
+  boot_res <- boot(data = data, statistic = boot_fun, R = R)
+  
+  # Full Sample Estimates
+  main_estimates <- boot_res$t0
+  
+  # Boot results
+  boot_runs <- as.data.frame(boot_res$t)
+  
+  # Loop for all metrics  
+  res <- lapply(seq_along(metrics), function(i) {
+    
+    # Column indices for this metric
+    idx <- (i - 1) * 3 + 1:3
+    
+    # Extract bootstrapped estimates
+    boot_mat <- boot_runs[, idx]
+    colnames(boot_mat) <- c("Low SES", "High SES", "diff")
+    
+    # Point estimate
+    #est <- main_estimates[idx]
+    est <- colMeans(boot_mat)[c("Low SES", "High SES")]
+    
+    # CIs from bootstrapped samples
+    ci_low  <- apply(boot_mat[, c("Low SES", "High SES")], 2, quantile, probs = 0.025)
+    ci_high <- apply(boot_mat[, c("Low SES", "High SES")], 2, quantile, probs = 0.975)
+    
+    # p-value for difference
+    p_val <- 2 * min(mean(boot_mat$diff > 0), mean(boot_mat$diff < 0))  # two-tailed
+    
+    # Return results
+    data.frame(
+      metric    = rep(metrics[i], 2),
+      group     = c("Low SES", "High SES"),
+      value     = round(est[1:2], 2),
+      ci_lower  = round(ci_low, 2),
+      ci_upper  = round(ci_high, 2),
+      p_value   = rep(p_val, 2),
+      stars     = rep(add_stars(p_val), 2),
+      group_var = "SES",
+      outcome   = outcome,      # Replace with actual outcome variable
+      predictor = predictor     # Replace with actual predictor
+    )
+  })
+  
+  # Combine
+  res <- bind_rows(res)
+  row.names(res) <- NULL
+  
+  # Return
+  res
 }
-
-
-
 
 
 
