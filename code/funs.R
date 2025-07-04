@@ -13,9 +13,7 @@ library(magrittr)
 library(ROSE)
 library(sjPlot)
 library(caret)
-library(olsrr)
 library(lmtest)
-library(ggfortify)
 library(ggeffects)
 library(ggmosaic)
 library(boot)
@@ -325,7 +323,7 @@ compute_group_metrics <- function(data, metric, outcome, predictor, fun_out, fun
 
 # IMPLEMENT BOOTSTRAPPING
 
-compute_group_metrics_boot <- function(data, metric, outcome, predictor, fun_out, fun_pred, R) {
+compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_out, fun_pred, R) {
   
   boot_fun <- function(data, indices) {
     
