@@ -30,14 +30,6 @@ table(df_high$high_PRED, df_high$high_OUT) %>% confusionMatrix(positive="1")
 
 
 
-# PGI DISTRIBUTION by SES #####################################
-
-ds <- "WLS"
-df <- get_data(ds)
-
-df %>% 
-  ggplot(aes(x = pgi_education, fill = SES)) +
-  geom_density(alpha = 0.5) 
 
 
 

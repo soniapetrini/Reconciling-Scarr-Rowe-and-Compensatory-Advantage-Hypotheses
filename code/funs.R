@@ -1,22 +1,27 @@
-library(dplyr)
-library(haven)
-library(ggplot2)
-library(magrittr)
-library(tidyverse)
-library(purrr)
-library(ggpubr)
-library(knitr)
-library(kableExtra)
-library(xtable)
-library(PRROC)
-library(magrittr)
-library(ROSE)
-library(sjPlot)
-library(caret)
-library(lmtest)
-library(ggeffects)
-library(ggmosaic)
-library(boot)
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(haven)
+  library(ggplot2)
+  library(magrittr)
+  library(tidyverse)
+  library(purrr)
+  library(ggpubr)
+  library(knitr)
+  library(kableExtra)
+  library(xtable)
+  library(PRROC)
+  library(magrittr)
+  library(ROSE)
+  library(sjPlot)
+  library(caret)
+  library(lmtest)
+  library(ggeffects)
+  library(ggmosaic)
+  library(boot)
+  library(glue)  
+  library(parallel)
+})
 
 
 
@@ -334,13 +339,12 @@ compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_ou
     data <- data %>%
       mutate(SES = if_else(SES_cont >= median(SES_cont), "High SES", "Low SES"))
     
+    # Create binary variables for predictor and outcome 
+    data <- dichotomize(data, outcome, predictor, fun_out, fun_pred)
+    
     # Filter by group
     High_data <- filter(data, SES == "High SES")
     Low_data  <- filter(data, SES == "Low SES")
-    
-    # Create binary variables for predictor and outcome 
-    High_data <- dichotomize(High_data, outcome, predictor, fun_out, fun_pred)
-    Low_data  <- dichotomize(Low_data, outcome, predictor, fun_out, fun_pred)
     
     # Compute all required metrics
     all_metrics <- lapply(metrics, function(metric) {
@@ -354,11 +358,9 @@ compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_ou
     do.call(c, all_metrics)
   }
   
-  # Run bootstrapping
-  boot_res <- boot(data = data, statistic = boot_fun, R = R)
   
-  # Full Sample Estimates
-  main_estimates <- boot_res$t0
+  # ---- Run bootstrapping ----
+  boot_res <- boot(data = data, statistic = boot_fun, R = R)
   
   # Boot results
   boot_runs <- as.data.frame(boot_res$t)
@@ -374,7 +376,6 @@ compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_ou
     colnames(boot_mat) <- c("Low SES", "High SES", "diff")
     
     # Point estimate
-    #est <- main_estimates[idx]
     est <- colMeans(boot_mat)[c("Low SES", "High SES")]
     
     # CIs from bootstrapped samples
@@ -403,8 +404,20 @@ compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_ou
   res <- bind_rows(res)
   row.names(res) <- NULL
   
-  # Return
-  res
+  # Add outcome information
+  res <- res %>%
+    mutate(high_OUT = ifelse(metric %in% c("TPR","FNR"), 1, 0))
+  
+  # Add sample size by group
+  N_groups <- lapply(c("Low SES", "High SES"), function(g) {
+    group_data <- filter(data, SES == g)
+    group_data <- dichotomize(group_data,outcome,predictor,fun_out,fun_pred)
+    group_data %>% group_by(high_OUT) %>% 
+      summarise(n = n()) %>% mutate(group = g)
+  }) %>% bind_rows
+  
+  # Combine and return
+  merge(res,N_groups)
 }
 
 
@@ -567,9 +580,8 @@ plot_perc <- function(results, show_metrics, adjust_pvalues) {
     guides(alpha = "none") +
     # Fix axis display
     scale_y_continuous(limits = c(0, 1), 
-                       name   = paste0("Proportion with PGI in the top ",(1-top_pgi)*100," %\n"),
-                       sec.axis = sec_axis(~ ., 
-                                           name = paste0("Proportion with PGI in the bottom ",(bottom_pgi)*100," %\n"))
+                       name   = "Sensitivity",
+                       sec.axis = sec_axis(~ ., name = "Specificity")
     ) 
   
 }

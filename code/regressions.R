@@ -54,23 +54,25 @@ plots <- lapply(datasets, function(ds) {
   
   # Combine in formula
   formula <- paste0(outcome, " ~ ", predictor, "*SES + ",
-                    paste(pred_interactions, collapse = " + "), " + ",
-                    paste(ses_interactions, collapse = " + "))
+                    paste(controls, collapse = " + ")
+                    #paste(pred_interactions, collapse = " + "), " + ",
+                    #paste(ses_interactions, collapse = " + ")
+                    )
   formula = as.formula(formula)
   
   
   
   # - 2 - Run models
-  # LOGIT
-  model_logit <- glm(formula, data = data, family = binomial(link = "logit"))
-  summary(model_logit)
-  
   
   # LPM
   model_ols <- lm(formula, data = data)
   summary(model_ols)
   
+  # LOGIT
+  model_logit <- glm(formula, data = data, family = binomial(link = "logit"))
+  summary(model_logit)
   
+
   # - 3 - extract coefficients
   
   annots <- lapply(c("logistic","LPM"), function(model_name) {

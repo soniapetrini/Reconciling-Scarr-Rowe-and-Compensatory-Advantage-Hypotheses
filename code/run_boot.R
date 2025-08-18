@@ -5,27 +5,23 @@ source("code/funs.R")
 
 
 # BOOTSTRAPPING ######################################################
-
-
-ds        <- "WLS"
+set.seed(123)
 outcome   <- "college"
 predictor <- "pgi_education"
 fun_out   <- "median"
-fun_pred  <- "no middle"
+fun_pred  <- "median"
+n_boot    <- 10000
 
 
-# Get data
-data <- get_data(ds)
+mclapply(c("WLS","ELSA"), function(ds) {
+  
+  # Get data
+  data <- get_data(ds)
+  
+  # Set metrics and compute them
+  metrics <- c("TPR","TNR","FPR","FNR")
+  results <- compute_group_metrics_boot(data, metrics, outcome, predictor, fun_out, fun_pred, n_boot)
 
-set.seed(123)
-n_boot    <- 1000
-metrics <- c("TPR","TNR","FPR","FNR")
-results <- compute_group_metrics_boot(data, metrics, outcome, predictor, fun_out, fun_pred, n_boot)
-results
-
-# Write
-saveRDS(results, paste0("results/",ds,"_",outcome,"_",n_boot,".rsd"))
-
-metrics <- c("TPR", "TNR")
-adjust_pvalues <- F
-plot_perc(results, metrics, adjust_pvalues)
+  # Write
+  saveRDS(results, paste0("results/",ds,"_",outcome,"_",fun_pred,"_",n_boot,".rsd"))
+}, mc.cores=4)
