@@ -2,13 +2,18 @@ setwd("~/Library/Mobile Documents/com~apple~CloudDocs/University/UNIL/projects/R
 
 
 
-# PGI DISTRIBUTION by SES #####################################
+
+# =========================================================
+#                ✨ RGI DISTRIBUTION by SES✨
+# =========================================================
 source("code/funs.R")
 
 library(scales)
 
+predictor <- "pgi_education"
+
 # Read data
-ds <- "ELSA"
+ds <- "WLS"
 df <- get_data(ds)
 
 # Rescale PGI
@@ -42,12 +47,15 @@ df %>%
   ylim(c(0, 0.42))
 
 # Save
-ggsave(paste0("plots/",ds,"_PGIdensity.pdf"), width = 6, height =6)
+ggsave(paste0("plots/",ds,"_PGIdensity.png"), width = 6, height =6)
 
 
 
 
-# DESCRIPTIVES ######################################################
+# =========================================================
+#                    ✨ DESCRIPTIVES ✨   
+# =========================================================
+
 source("code/funs.R")
 
 # Sample size
@@ -83,6 +91,40 @@ get_data(ds) %>%
             birth_year_m = mean(birth_year),
             birth_year_sd = sd(birth_year),
             ) %>% xtable()
+
+
+
+
+
+# =========================================================
+#                    ✨ BIRTH YEAR PLOT ✨ 
+# =========================================================
+
+ds <- "ELSA"
+get_data(ds) %>%
+  ggplot(aes(y = "", x = birth_year)) +
+  geom_violin(fill = "lightblue") +
+  theme_minimal() +
+  theme(axis.title.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  labs(x="birth year") +
+  xlim(c(1905,1990)) 
+ggsave(paste0("plots/",ds,"_birth_year.png"), width = 6, height =2)
+
+
+ds <- "WLS"
+get_data(ds) %>%
+  ggplot(aes(y = "", x = birth_year)) +
+  geom_violin(fill = "orange") +
+  theme_minimal() +
+  theme(axis.title.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  labs(x="birth year") +
+  xlim(c(1905,1990))
+ggsave(paste0("plots/",ds,"_birth_year.png"), width = 6, height =2)
+
+
+
 
 
 

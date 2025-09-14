@@ -4,61 +4,93 @@ setwd("~/Library/Mobile Documents/com~apple~CloudDocs/University/UNIL/projects/R
 
 
 
-# RESULTS TABLE ######################################################
+# =========================================================
+#                     ✨ RESULTS TABLE ✨
+# =========================================================
+
 source("code/funs.R")
 
 
 outcome   <- "college"
 predictor <- "pgi_education"
-fun_out   <- "median"
 fun_pred  <- "median"
-n_boot    <- 1000
+n_boot    <- 10000
 
 # Read results
 results <- lapply(c("WLS","ELSA"), function(ds) {
   results <- readRDS(paste0("results/",ds,"_",outcome,"_",fun_pred,"_",n_boot,".rsd"))
   results %>% mutate(dataset = ds) %>% 
-    filter(metric %in% c("TPR", "TNR"))
+    filter(metric %in% c("FNR", "FPR"))
 })
 
-# Add Add Health manually (n_boot=10000, "no middle")
-results_AH <- data.frame(metric    = c(rep("TPR",2), rep("TNR",2)),
-                         value     = c(0.58, 0.69, 0.61, 0.57),
-                         ci_lower  = c(0.55, 0.65, 0.58, 0.55),
-                         ci_upper  = c(0.60, 0.74, 0.64, 0.58),
-                         group     = c("High SES", "Low SES", "High SES", "Low SES"),
-                         high_OUT  = c(1,1,0,0),
-                         n         = c(799, 359, 589, 1035),
-                         p_value   = c(rep(0.000, 2), rep(0.0084,2)),
-                         stars     = c(rep("***",2), rep("**",2)),
-                         group_var = rep("SES", 4),
-                         outcome   = rep(outcome, 4),
-                         predictor = rep(predictor, 4),
-                         dataset   = rep("AH", 4)
-)
+# Add Add Health manually 
+results_AH <- if (fun_pred == "median") {
+  # (n_boot=10000, "median")
+  data.frame(
+    group = c("High SES", "High SES", "High SES", "High SES",
+              "Low SES", "Low SES", "Low SES", "Low SES"),
+    high_OUT = c(0, 0, 1, 1, 0, 0, 1, 1),
+    metric = c("FPR", "TNR", "TPR", "FNR",
+               "FPR", "TNR", "TPR", "FNR"),
+    value = c(0.41, 0.59, 0.57, 0.43,
+              0.44, 0.56, 0.66, 0.34),
+    ci_lower = c(0.38, 0.57, 0.55, 0.41,
+                 0.43, 0.54, 0.62, 0.30),
+    ci_upper = c(0.43, 0.62, 0.59, 0.45,
+                 0.46, 0.57, 0.70, 0.38),
+    p_value = c(0.0094, 0.0094, 0.0000, 0.0000,
+                0.0094, 0.0094, 0.0000, 0.0000),
+    stars = c("**", "**", "***", "***",
+              "**", "**", "***", "***"),
+    group_var = rep("SES", 8),
+    outcome = rep("college", 8),
+    predictor = rep("pgi_education", 8),
+    n = c(732, 732, 1020, 1020,
+          1275, 1275, 450, 450),
+    dataset   = rep("AH", 4)
+  )
+} else if (fun_pred == "no middle") {
+  # (n_boot=10000, "no middle")
+  data.frame(
+    group = c("High SES", "High SES", "High SES", "High SES",
+              "Low SES", "Low SES", "Low SES", "Low SES"),
+    high_OUT = c(0, 0, 1, 1, 0, 0, 1, 1),
+    metric = c("FPR", "TNR", "TPR", "FNR",
+               "FPR", "TNR", "TPR", "FNR"),
+    value = c(0.39, 0.61, 0.58, 0.42,
+              0.43, 0.57, 0.69, 0.31),
+    ci_lower = c(0.36, 0.58, 0.56, 0.40,
+                 0.42, 0.55, 0.65, 0.26),
+    ci_upper = c(0.42, 0.64, 0.60, 0.44,
+                 0.45, 0.58, 0.74, 0.35),
+    p_value = c(0.0084, 0.0084, 0.0000, 0.0000,
+                0.0084, 0.0084, 0.0000, 0.0000),
+    stars = c("**", "**", "***", "***",
+              "**", "**", "***", "***"),
+    group_var = rep("SES", 8),
+    outcome = rep("college", 8),
+    predictor = rep("pgi_education", 8),
+    n = c(597, 597, 805, 805,
+          1025, 1025, 355, 355),
+    dataset   = rep("AH", 4)
+  )
+  
+} else {break}
 
-# Add Add Health manually (n_boot=10000, "median")
-results_AH <- data.frame(metric    = c(rep("TPR",2), rep("TNR",2)),
-                         value     = c(0.57, 0.66, 0.59, 0.56),
-                         ci_lower  = c(0.55, 0.62, 0.57, 0.54),
-                         ci_upper  = c(0.59, 0.70, 0.62, 0.57),
-                         group     = c("High SES", "Low SES", "High SES", "Low SES"),
-                         high_OUT  = c(1,1,0,0),
-                         n         = c(799, 359, 589, 1035),
-                         p_value   = c(rep(0.000, 2), rep(0.0094,2)),
-                         stars     = c(rep("***",2), rep("**",2)),
-                         group_var = rep("SES", 4),
-                         outcome   = rep(outcome, 4),
-                         predictor = rep(predictor, 4),
-                         dataset   = rep("AH", 4)
-)
+
+
+# filter only Falses from AH
+results_AH_false <- results_AH %>% filter(metric %in% c("FNR", "FPR"))
 
 # Combine all datasets
-results <- bind_rows(results, results_AH)
+results <- bind_rows(results)
+results <- bind_rows(results, results_AH_false)
+results
+
 
 # Set labels
 results <- results %>% 
-  mutate(status  = ifelse(metric=="TPR", "College", "No College"),
+  mutate(status  = ifelse(metric=="FNR", "College", "No College"),
          group   = factor(group, levels=c("Low SES", "High SES")),
          dataset = factor(dataset, levels=c("WLS", "ELSA","AH")))
 
@@ -73,7 +105,7 @@ pvalues
 
 # Reshape
 results <- results %>% 
-  select(dataset, outcome, status, group, value, ci_lower, ci_upper, n) %>%
+  select(dataset, status, group, value, ci_lower, ci_upper, n) %>%
   pivot_wider(names_from = group, values_from = c(value, ci_lower, ci_upper, n))
 
 # Compute difference
@@ -81,7 +113,7 @@ results <- results %>%
   mutate(diff = `value_Low SES` - `value_High SES`)
 
 # Combine with pvalues and adjust
-results <- left_join(results, pvalues, by=c("dataset","outcome","status"))
+results <- left_join(results, pvalues, by=c("dataset","status"))
 
 # Add prevalence
 results <- results %>% 
@@ -105,79 +137,39 @@ latex_table
 
 
 
-# MAIN PLOT ######################################################
-
-ds <- "WLS"
-
-## Fake predictor as baseline
-#set.seed(123)
-#data$fake_predictor <- rnorm(nrow(data))
-#predictor <- "fake_predictor"
-
-# - Perc plot
-results <- readRDS(paste0("results/",ds,"_",outcome,"_",fun_pred,"_",n_boot,".rsd")) %>%
-  mutate(dataset=ds, status=ifelse(high_OUT==1,"College","No College"))
-
-# Correct stars
-pvalues_ds <- filter(pvalues, dataset == ds) %>% select(dataset, status, stars.adj)
-results    <- merge(results, pvalues_ds, by=c("dataset","status"))
-adjust_pvalues <- ifelse("stars.adj" %in% colnames(results),T,F)
-
-# Plot
-plot_perc(results, c("TPR", "TNR"), adjust_pvalues)
-
-# Save
-ggsave(paste0("plots/",ds,"_",outcome,".pdf"), width = 6, height =7)
 
 
+# =========================================================
+#                     ✨ MAIN PLOT ✨  
+# =========================================================
 
+# Assumes that pvalues have been adjusted in previous code:
 
+lapply(c("WLS","ELSA", "AH"), function(ds) {
+  
+  # Read results
+  results <- if (ds == "AH") {
+    results_AH
+  } else {
+    readRDS(paste0("results/",ds,"_",outcome,"_",fun_pred,"_",n_boot,".rsd")) 
+  }
+  
+  # Add status variable
+  results <- results %>%
+    mutate(dataset=ds, status=ifelse(high_OUT==1,"College","No College"))
+  
+  # Correct stars
+  pvalues_ds <- filter(pvalues, dataset == ds) %>% select(dataset, status, stars.adj)
+  results    <- merge(results, pvalues_ds, by=c("dataset","status"))
+  adjust_pvalues <- ifelse("stars.adj" %in% colnames(results),T,F)
+  
+  # Plot
+  plot_perc(results, c("FNR", "FPR"), adjust_pvalues)
+  
+  # Save
+  ggsave(paste0("plots/",ds,"_",outcome,"_",fun_pred,".pdf"), width = 7, height =7)
 
+})
 
-# SAMPLE SIZE PLOT ######################################################
-
-outcome   <- "college"
-fun_pred  <- "no middle"
-n_boot <- 10000
-which_metric <- "TNR"
-
-# Read results for a metric
-results <- lapply(c("WLS","ELSA"), function(ds) {
-  readRDS(paste0("results/",ds,"_",outcome,"_",fun_pred,"_",n_boot,".rsd")) %>% 
-    filter(metric %in% c("TPR","TNR")) %>%
-    mutate(dataset = ds) %>% 
-    select(dataset, group, high_OUT, n, metric, value, ci_lower, ci_upper) %>%
-    arrange(dataset, group, metric, n)
-}) %>% bind_rows()
-
-# Add AH
-results <- results_AH %>% 
-  select(dataset, group, high_OUT, n, metric, value, ci_lower, ci_upper) %>%
-  bind_rows(results)
-results
-
-# Compute p
-results <- results %>% 
-  group_by(dataset, group) %>%
-  mutate(prevalence = n[high_OUT == 1] / sum(n)) %>%
-  ungroup()
-
-# Filter one metric
-results <- results %>%
-  filter(metric == which_metric)
-
-
-# x label
-#x_labs <- c("TPR"=)
-
-# Plot with n
-ggplot(results, aes(x=prevalence, y=value, color=group)) +
-  geom_point(size=3) +
-  geom_text(aes(label=dataset), color ="black", vjust=-3) +
-  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), 
-                width = 0.01, linewidth = 1) +
-  labs(y=which_metric) +
-  ylim(c(0, 1)) + 
-  geom_hline(yintercept = mean(results$value))
 
 

@@ -24,8 +24,10 @@ suppressPackageStartupMessages({
 })
 
 
+# =========================================================
+#                      ✨ GLOBALS ✨
+# =========================================================
 
-# GLOBALS ####################################################
 data_dir = "~/Library/Mobile Documents/com~apple~CloudDocs/University/UNIL/data/"
 SES_vars = c("father_edu", "father_occu")
 DEMO     = c("birth_year", "sex")
@@ -37,11 +39,13 @@ bottom_pgi <- 0.40
 top_pgi    <- 0.60
 
 
-# LABELS ####################################################
-metrics.labs <- c(
-                  #"NPV" = "Low PGI  ",
-                  #"PPV" = "High PGI ",
-                  "NPV" = "Negative Predictive\nValue",
+
+
+# =========================================================
+#                      ✨ LABELS ✨
+# =========================================================
+
+metrics.labs <- c("NPV" = "Negative Predictive\nValue",
                   "PPV" = "Positive Predictive\nValue",
                   "TNR" = "P (Low PGI)",
                   "FNR" = "False Negative\nRate",
@@ -49,25 +53,33 @@ metrics.labs <- c(
                   "TPR" = "P (High PGI)"
                   )
 
-
 groups.labs <- c("Low SES"  = "#fbaca7", "High SES" = "#52d8da")
 
-outcome.labs <- c("education"         = "Educational attainment",
-                  "cognitive"         = "Cognitive ability",
-                  "high_school"       = "High School completed",
-                  "college"           = "College",
-                  "graduate_school"   = "Graduate completed"
+outcome.labs <- c("education"       = "Educational attainment",
+                  "cognitive"       = "Cognitive ability",
+                  "high_school"     = "High School completed",
+                  "college"         = "College",
+                  "graduate_school" = "Graduate completed"
                   )
 
-neg.outcome.labs <- c("education"         = "Low Educational attainment",
-                      "cognitive"         = "Low Cognitive ability",
-                      "high_school"       = "High School not completed",
-                      "college"           = "No College",
-                      "graduate_school"   = "Graduate not completed"
-)
+neg.outcome.labs <- c("education"       = "Low Educational attainment",
+                      "cognitive"       = "Low Cognitive ability",
+                      "high_school"     = "High School not completed",
+                      "college"         = "No College",
+                      "graduate_school" = "Graduate not completed"
+                      )
 
 
-# FUNCTIONS ####################################################
+
+
+
+
+## =========================================================
+##                      ✨ FUNCTIONS ✨
+## =========================================================
+
+
+# ~~~~~ 🌿 DATA PREPARATION ~~~~~
 
 negative_to_na <- function(x) if_else(x<0, NA, x, missing = NA)
 
@@ -83,31 +95,18 @@ add_stars <- function(p_values) {
 }
 
 
-
-
-calc_tpr <- function(pred_prob, actual, threshold) {
-  pred_class <- ifelse(pred_prob >= threshold, 1, 0)
-  tp <- sum(pred_class == 1 & actual == 1)
-  fn <- sum(pred_class == 0 & actual == 1)
-  tp / (tp + fn)
-}
-
-# Function to calculate FPR for a given threshold  
-calc_tnr <- function(pred_prob, actual, threshold) {
-  pred_class <- ifelse(pred_prob >= threshold, 1, 0)
-  fp <- sum(pred_class == 1 & actual == 0)
-  tn <- sum(pred_class == 0 & actual == 0)
-  tn / (fp + tn)
-}
-
-
-dichotomize <- function(data, outcome, predictor, fun_out, fun_pred, resid=T) {
+dichotomize <- function(data, outcome, predictor, fun_pred, fun_out=NULL, resid=T) {
   
   # - Residualise out of PGIs
   if (resid) {
     # Add control variables
     pcs     = paste(PC_vars, collapse = " + ")
     demo    = paste(DEMO,    collapse = " + ")
+    
+    if (length(unique(data$sex))==1) {
+      demo = "birth_year"
+    }
+    
     # Run regression
     formula <- as.formula(paste(predictor," ~", pcs, " + ", demo))
     model   <- lm(formula, data = data)
@@ -145,8 +144,7 @@ dichotomize <- function(data, outcome, predictor, fun_out, fun_pred, resid=T) {
   }
   
   
-  
-  
+
   # - OUTCOME
   
   # Create binary
@@ -169,8 +167,8 @@ dichotomize <- function(data, outcome, predictor, fun_out, fun_pred, resid=T) {
    # If a numeric threshold is given (adjust classes if necessary)
    data %<>% mutate(high_OUT = ifelse(get(outcome) >= fun_out, 1, 0))
    
- } else {
-   # If a function is given
+ } else if (!all(data[[outcome]] %in% c(0, 1)) & is.function(fun_out)) {
+   # If a function is given and outcome is not binary
    fun_out = get(fun_out)
    thresh  = fun_out(data[[outcome]])
    # Create binary
@@ -184,6 +182,8 @@ dichotomize <- function(data, outcome, predictor, fun_out, fun_pred, resid=T) {
 
 
 
+
+# ~~~~~ 📊 COMPUTATIONS ~~~~~
 
 calculate_metrics <- function(data, metric) {
   
@@ -249,86 +249,11 @@ calculate_metrics <- function(data, metric) {
 
 
 
-# Function to calculate a metric with Wilson CIs
-compute_a_metric <- function(data, metric) {
-  
-  # Compute metrics
-  res <- calculate_metrics(data, metric)
-  metric_value <- res$metric
-  num          <- res$num
-  denom        <- res$denom
-  
-  # Calculate confidence interval using Wilson method
-  z <- 1.96
-  denominator <- 1 + z^2/denom
-  center      <- (metric_value + z^2/(2*denom))/denominator
-  halfwidth   <- z * sqrt(metric_value*(1-metric_value)/denom + z^2/(4*denom^2))/denominator
-  
-  return(data.frame(metric = metric,
-              value = metric_value, 
-              ci_lower = round(max(0, center - halfwidth),2),
-              ci_upper = round(min(1, center + halfwidth),2),
-              n = denom))
-  
-}
 
 
 
-compute_group_metrics <- function(data, metric, outcome, predictor, fun_out, fun_pred) {
-  
-  # Split by group
-  High_data <- filter(data, SES == "High SES")
-  Low_data  <- filter(data, SES == "Low SES")
-  
-  # Create binary variables for predictor and outcome 
-  High_data <- dichotomize(High_data, outcome, predictor, fun_out, fun_pred)
-  Low_data  <- dichotomize(Low_data, outcome, predictor, fun_out, fun_pred)
-
-  # Compute prevalence
-  prev_High <- mean(High_data$high_OUT) %>% round(2)
-  prev_Low  <- mean(Low_data$high_OUT) %>% round(2)
-  
-  # Compute required metric on each group
-  result_High <- compute_a_metric(High_data, metric)
-  result_Low  <- compute_a_metric(Low_data, metric)
-  
-  # Retreive numerator from proportion and denominator
-  num_High = round(result_High$value * result_High$n)
-  num_Low  = round(result_Low$value * result_Low$n)
-  
-  # Table with counts
-  table_2x2 <- matrix(
-    c(num_High, result_High$n - num_High,
-      num_Low,  result_Low$n  - num_Low),
-    nrow = 2,
-    byrow = TRUE
-  )
-  
-  ## Fisher's Exact Test  test for the significance of between-group differences
-  test_result <- fisher.test(table_2x2)
-  
-  # Combine main results
-  result_High %<>% mutate(group = "High SES", prevalence = prev_High)
-  result_Low  %<>% mutate(group = "Low SES",  prevalence = prev_Low)
-  results <- rbind.data.frame(result_High, result_Low) 
-  
-  # Add significance test
-  results %>% 
-    mutate(p_value    = test_result$p.value,
-           y_position = max(results$ci_upper) + 0.12,
-           stars      = add_stars(p_value),
-           group_var  = "SES",
-           outcome    = outcome,
-           predictor  = predictor)
-  
-}
-
-
-
-
-# IMPLEMENT BOOTSTRAPPING
-
-compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_out, fun_pred, R) {
+# Main function 
+compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_pred, R, fun_out=NULL) {
   
   boot_fun <- function(data, indices) {
     
@@ -338,13 +263,14 @@ compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_ou
     # Create SES var based on boot sample median
     data <- data %>%
       mutate(SES = if_else(SES_cont >= median(SES_cont), "High SES", "Low SES"))
-    
-    # Create binary variables for predictor and outcome 
-    data <- dichotomize(data, outcome, predictor, fun_out, fun_pred)
-    
+  
     # Filter by group
     High_data <- filter(data, SES == "High SES")
     Low_data  <- filter(data, SES == "Low SES")
+    
+    # Create binary variables for predictor and outcome 
+    High_data <- dichotomize(High_data, outcome, predictor, fun_pred, fun_out)
+    Low_data  <- dichotomize(Low_data, outcome, predictor, fun_pred, fun_out)
     
     # Compute all required metrics
     all_metrics <- lapply(metrics, function(metric) {
@@ -411,7 +337,7 @@ compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_ou
   # Add sample size by group
   N_groups <- lapply(c("Low SES", "High SES"), function(g) {
     group_data <- filter(data, SES == g)
-    group_data <- dichotomize(group_data,outcome,predictor,fun_out,fun_pred)
+    group_data <- dichotomize(group_data,outcome,predictor,fun_pred, fun_out)
     group_data %>% group_by(high_OUT) %>% 
       summarise(n = n()) %>% mutate(group = g)
   }) %>% bind_rows
@@ -423,7 +349,9 @@ compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_ou
 
 
 
-# helper dictionary
+
+
+# ~~~~~ 🦄 VISUALIZATION ~~~~~
 
 plot_rates <- function(results) {
   
@@ -541,12 +469,11 @@ plot_perc <- function(results, show_metrics, adjust_pvalues) {
     # Axis labels
     labs(x="") +
     # Value labels
-    geom_text(aes(label = value_label), 
-              vjust = -3.5,
-              size = 6,
+    geom_text(aes(label = value_label, y=0.05), 
+              size = 10,
               color = "#635856") +
     # Add stars
-    geom_text(aes(y=0.9, x=1.5, label = stars),
+    geom_text(aes(y=0.77, x=1.5, label = stars),
               color = "#635856", 
               size  = 10, inherit.aes = F) +
     # Add 0.5 line
@@ -555,33 +482,33 @@ plot_perc <- function(results, show_metrics, adjust_pvalues) {
                alpha=0.6, linewidth=1) +
     # Add horizontal comparison lines between groups
     geom_segment(data=filter(counts, stars != ""),
-                 x = 1, xend = 2, y = 0.88, yend = 0.88,
+                 x = 1, xend = 2, y = 0.75, yend = 0.75,
                  color = "#635856", linewidth = 0.5,
                  inherit.aes = FALSE) +
     # Add bracket ends (optional)
     geom_segment(data=filter(counts, stars != ""),
-                 x = 1, xend = 1, y = 0.86, yend = 0.88,
+                 x = 1, xend = 1, y = 0.73, yend = 0.75,
                  color = "#635856", linewidth = 0.5,
                  inherit.aes = FALSE) +
     geom_segment(data=filter(counts, stars != ""),
-                 x = 2, xend = 2, y = 0.86, yend = 0.88,
+                 x = 2, xend = 2, y = 0.73, yend = 0.75,
                  color = "#635856", linewidth = 0.5,
                  inherit.aes = FALSE) +
     #theme_minimal() +
     theme(legend.position = "bottom",
           legend.key.size = unit(2, "lines"),
-          legend.text = element_text(size = 20),
+          legend.text = element_text(size = 24),
           axis.text.x = element_blank(),
           axis.ticks.x  = element_blank(),
-          text            = element_text(size=20),
+          text            = element_text(size=24),
           axis.title.y    = element_text(color = "#635856"),
           strip.text      = element_text(color = "#635856")) +
     scale_fill_discrete(name="") +
     guides(alpha = "none") +
     # Fix axis display
     scale_y_continuous(limits = c(0, 1), 
-                       name   = "Sensitivity",
-                       sec.axis = sec_axis(~ ., name = "Specificity")
+                       name   = "p (overachieve)\n",
+                       sec.axis = sec_axis(~ ., name = "p (underachieve) \n")
     ) 
   
 }
