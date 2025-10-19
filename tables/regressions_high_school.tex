@@ -1,0 +1,29 @@
+\begin{table}
+\centering
+\begin{talltblr}[         %% tabularray outer open
+entry=none,label=none,
+note{}={+ p < 0.1, * p < 0.05, ** p < 0.01, *** p < 0.001},
+]                     %% tabularray outer close
+{                     %% tabularray inner open
+colspec={Q[]Q[]Q[]Q[]Q[]Q[]Q[]Q[]Q[]},
+column{1}={halign=l,},
+column{2}={halign=c,},
+column{3}={halign=c,},
+column{4}={halign=c,},
+column{5}={halign=c,},
+column{6}={halign=c,},
+column{7}={halign=c,},
+column{8}={halign=c,},
+column{9}={halign=c,},
+}                     %% tabularray inner close
+\toprule
+& WLS.LPM.NoKeller & WLS.LPM.Keller & WLS.Logistic.NoKeller & WLS.Logistic.Keller & ELSA.LPM.NoKeller & ELSA.LPM.Keller & ELSA.Logistic.NoKeller & ELSA.Logistic.Keller \\ \midrule %% TinyTableHeader
+PGI     & \num{0.01}*** & \num{1.30}*   & \num{1.61}*** & \num{1.860390e+03}   & \num{0.15}*** & \num{1.15}     & \num{2.05}*** & \num{1.000000e-02}   \\
+& (\num{0.00})  & (\num{0.63})  & (\num{0.23})  & (\num{8.896299e+04}) & (\num{0.01})  & (\num{1.58})   & (\num{0.12})  & (\num{1.300000e-01}) \\
+SES     & \num{0.01}*** & \num{9.18}*** & \num{3.52}*** & \num{1.027738e+92}   & \num{0.20}*** & \num{11.09}*** & \num{2.87}*** & \num{2.789568e+14}+  \\
+& (\num{0.00})  & (\num{1.27})  & (\num{1.10})  & (\num{1.533633e+94}) & (\num{0.02})  & (\num{3.10})   & (\num{0.24})  & (\num{4.933806e+15}) \\
+PGI×SES & \num{-0.01}*  & \num{-0.01}*  & \num{1.10}    & \num{1.210000e+00}   & \num{-0.03}*  & \num{-0.03}*   & \num{1.01}    & \num{1.000000e+00}   \\
+& (\num{0.00})  & (\num{0.00})  & (\num{0.30})  & (\num{4.000000e-01}) & (\num{0.01})  & (\num{0.02})   & (\num{0.09})  & (\num{9.000000e-02}) \\
+\bottomrule
+\end{talltblr}
+\end{table}

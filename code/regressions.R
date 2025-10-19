@@ -2,7 +2,7 @@ setwd("~/Library/Mobile Documents/com~apple~CloudDocs/University/UNIL/projects/R
 
 
 # =========================================================
-#                  ✨ RALL REGRESSIONS✨
+#                  ✨ REGRESSION ANALYSIS ✨
 # =========================================================
 
 source("code/funs.R")
@@ -10,143 +10,89 @@ source("code/funs.R")
 
 
 # Settings
-outcome   <- "college"
 predictor <- "pgi_education"
-keller <- F
-datasets <- c("WLS","ELSA")
+outcomes  <- c("high_school","college")
+datasets  <- c("WLS","ELSA")
 
 
-# Loop for all datasets
-plots <- lapply(datasets, function(ds) {
-  
-  # - 1 - Prepare
-  data     <- get_data(ds)
-  data[predictor] = as.vector(scale(data[predictor]))
-  data$SES <- factor(data$SES, levels = c("Low SES", "High SES"))
-  
-  
-  # ---  Create all interactions
-  controls          <- c(DEMO, PC_vars)
-  pred_interactions <- paste0(predictor, "*", controls)
-  ses_interactions  <- paste0("SES*", controls)
-  
-  # Combine in formula
-  formula <- paste0(outcome, " ~ ", predictor, "*SES + ",
-                    paste(controls, collapse = " + "))
-  if (keller) formula <- paste0(formula, " + ",
-                                paste(pred_interactions, collapse = " + "), " + ",
-                                paste(ses_interactions, collapse = " + ")
-  )
-  formula = as.formula(formula)
-  
-  
-  
-  # - 2 - Run models
-  
-  # LPM
-  model_ols <- lm(formula, data = data)
-  summary(model_ols)
-  
-  # LOGIT
-  model_logit <- glm(formula, data = data, family = binomial(link = "logit"))
-  summary(model_logit)
-  
 
-  # - 3 - extract coefficients
+# For each outcome
+for (outcome in outcomes)  {
+
+  #################  RUN REGRESSIONS  ################# 
   
-  annots <- lapply(c("logistic","LPM"), function(model_name) {
+  # === Datasets
+  models_all <- lapply(datasets, function(ds) {
     
-    model <- switch(model_name, "LPM" = model_ols, "logistic"=model_logit)
-    coefs <- coef(summary(model))[paste0(predictor,":SESHigh SES"), ]
-    coef  <- coefs["Estimate"]
+    # === Model specification
+    models_type <- lapply(c("LPM","Logistic"), function(which_model) {
+      
+      # === Keller adjustment
+      models_keller <- lapply(c(F,T), function(keller) {
+      
+        # === Run regression
+        RunRegression(ds, which_model, outcome, predictor, keller)
     
-    if(model_name=="logistic") {
-      coef <- round(exp(coef), 1)
-      coef_label <- "OR:"
-      pvalue     <- coefs["Pr(>|z|)"]
-    } else {
-      coef <- round(coef, 2)
-      coef_label <- "beta:"
-      pvalue     <- coefs["Pr(>|t|)"]
-    }
-    
-    pvalue_label <- add_stars(pvalue)
-    
-    data.frame(
-      model = model_name,
-      label = paste(coef_label, coef, pvalue_label)
-    )
+      })
+      c("NoKeller"=models_keller[1], "Keller"=models_keller[2])
+      
+    })
+    c("LPM" = models_type[[1]], "Logistic" = models_type[[2]])
+  
   })
   
-  annotations <- do.call(rbind, annots) %>% 
-    mutate(model = factor(model, levels=c("logistic","LPM"), labels=c("Logistic", "LPM"))) 
+  
+  # Combine all models for an outcome
+  models <- c("WLS"= models_all[[1]], "ELSA" = models_all[[2]])
   
   
-  # - 4 - Plot
-  # Logit
-  preds <- ggpredict(model_logit, terms = c(paste(predictor,"[all]"), "SES"))
+  # Select only variables of interest
+  coef_map <- c("pgi_education" = "PGI", "SESHigh SES" = "SES",
+                "pgi_education:SESHigh SES" = "PGI×SES")
   
-  plot_logit <- plot(preds) +
-    geom_text(data = filter(annotations, model=="Logistic"), 
-              aes(label = label),
-              x = -1.5,
-              y = 0.93,
-              hjust = 0, 
-              size=6,
-              inherit.aes = FALSE) +
-    labs(title="", x = "PGI", y = "Predicted probability") +
-    theme_minimal() +
-    theme(text=element_text(size=20)) +
-    guides(color = "none") +
-    scale_color_manual(values=groups.labs) +
-    ylim(c(0,1)) +
-    xlim(c(-2,2))
   
-  # LPM
-  preds <- ggpredict(model_ols, terms = c(paste(predictor,"[all]"), "SES"))
-  plot_OLS <- plot(preds) +
-    geom_text(data = filter(annotations, model=="LPM"), 
-              aes(label = label),
-              x = -1.5,
-              y = 0.93,
-              hjust = 0, 
-              size=6,
-              inherit.aes = FALSE) +
-    labs(title="", x = "PGI", y = "Predicted probability") +
-    theme_minimal() +
-    theme(text=element_text(size=20)) +
-    scale_color_manual(values=groups.labs, name="") +
-    ylim(c(0,1)) +
-    xlim(c(-2,2))
+  # Export to LaTeX table
+  modelsummary(
+    models,
+    stars = TRUE,
+    coef_map = coef_map,
+    exponentiate = c(F,F,T,T,F,F,T,T),
+    #output = paste0("tables/regressions_",outcome,".txt"),
+    output="latex",
+    fmt = 2,
+    gof_omit = ".*"
+  ) %>% print()
   
-  plot <- ggarrange(plot_OLS, plot_logit, 
-                    ncol=1, common.legend = T, 
-                    legend = "bottom")
-  plot
   
-  ggsave(paste0("plots/",ds,"_regs.jpg"), width = 5, height = 10)
   
-})
+  ############ PLOTS ############ 
+  
+  p <- lapply(datasets, function(ds) {
+    
+    # Select dataset
+    models_ds <- models[grepl(ds, names(models))]
+    
+    # Keep NoKeller
+    models_ds <- models_ds[grepl("NoKeller", names(models_ds))]
+    
+    
+    # Plot and combine
+    plot <- ggarrange(PlotRegression(models_ds, "LPM"), 
+                      PlotRegression(models_ds, "Logistic"), 
+                      ncol=1, common.legend = T, 
+                      legend = "bottom")
+    
+    # Show
+    plot
+    
+    # Save
+    ggsave(paste0("plots/",ds,"_regs_",outcome,".pdf"), width = 5, height = 10)
+    
+  })
 
-
-ggarrange(plotlist = plots, ncol=2,
-          common.legend = T, 
-          legend = "bottom")
-
-ggsave(paste0("plots/regs.jpg"), width = 12, height = 10)
-
-
-
-
-
-
-
-
-
-
-
-
-
+  
+  
+}
 
 
 

@@ -6,8 +6,7 @@ source("code/funs.R")
 #####################################
 # DATA
 
-data       <- readRDS(paste0(data_dir,"WLS/raw/data.rds"))
-pgi_cog    <- readRDS(paste0(data_dir,"WLS/raw/pgi_cog.rds"))
+data <- readRDS(paste0(data_dir,"WLS/raw/data.rds"))
 
 print("finished reading raw data.")
 
@@ -57,71 +56,44 @@ data <- data %>%
 ########################## OUTCOMES ######################################
 
 # Check missing cases in the educational variables
-missing_summary <- data %>%
+valid_summary <- data %>%
   summarise(
-    valid_yoe_1 = sum(!is.na(z_edeqyr)), # R03 Equivalent years of regular education.
-    valid_yoe_2 = sum(!is.na(z_rb004red)), # R04 Summary of equivalent yrs of regular education based on most recent degree.
-    valid_yoe_3 = sum(!is.na(z_gb103red)), # R05 How many years of education does R have based on his or her Highest degree?
-    valid_yoe_4 = sum(!is.na(z_mx001rer)) #R06 Summary of equivalent years of regular education based on Highest degree.
+    valid_yoe_3 = sum(!is.na(z_edeqyr)), # R03 Equivalent years of regular education.
+    valid_yoe_4 = sum(!is.na(z_rb003red)), # R04 Summary of equivalent yrs of regular education based on most recent degree.
+    valid_yoe_5 = sum(!is.na(z_gb103red)), # R05 How many years of education does R have based on his or her Highest degree?
+    valid_yoe_6 = sum(!is.na(z_hb103red)) #R06 Summary of equivalent years of regular education based on Highest degree.
   )
+valid_summary
 
 
-# High School
+# Check values
 attributes(data$z_hb103red)
 
-
-
-
-EDU     <- c(education_1  = "z_edeqyr",   education_2  = "z_rb004red", education_3  = "z_gb103red", education_4 = "z_hb103red") # years of education
-INC_IND <- c(income_ind_5 = "z_gp250rec", income_ind_6 = "z_hpu50rec") # individual level income (total personal income)
+EDU     <- c(education3  = "z_edeqyr",   education4  = "z_rb003red", education5 = "z_gb103red", education6 = "z_hb103red") # years of education
 TALL    <- c(heigh   = "z_mx010rec")
-COLLEGE <- c(college = "z_hb001re")
-
-
 
 # Rename
-data <- data %>% rename(!!!EDU, !!!COLLEGE, !!!TALL, !!!INC_IND)
-
+data <- data %>% rename(!!!EDU, !!!TALL)
 
 # Clean (sending negative values to NA)
-
-# -- other (all negative)
 data <- data %>%
-  mutate_at(vars(names(EDU), names(COLLEGE), names(TALL), names(INC_IND)), ~ ifelse(. < 0, NA, .))
+  mutate_at(vars(names(EDU), names(TALL)), ~ ifelse(. < 0, NA, .))
 
+# Check
+table(data$education4)
 
 # Combine averaging to have more stable measures
 data <- data %>%
   mutate(
-    education       = rowMeans(select(., all_of(names(EDU))), na.rm=TRUE),
-    High_school     = if_else(education >= 12, 1, 0),
-    college         = if_else(education >= 15, 1, 0),
-    graduate_school = if_else(education >= 17, 1, 0),
-    income          = rowMeans(select(., all_of(names(INC_IND))), na.rm=TRUE)
+    education       = rowMeans(select(., education5, education6), na.rm=TRUE),
+    high_school     = if_else(education  >= 12, 1, 0),
+    college         = if_else(education  >= 16, 1, 0),
+    graduate_school = if_else(education  >= 17, 1, 0)
   )
 
 
 
 ########################## SES ######################################
-
-
-# ----- Build from paternal occupation and education
-#data <- data %>%
-#  mutate(
-#    father_edu  = if_else(edfa57q  < 0, NA, edfa57q), 
-#    father_occu = if_else(bmfoc1u  < 0, NA, bmfoc1u)
-#  )
-#
-## Scale SES variables
-#data <- data %>%
-#  mutate(across(all_of(SES_vars), ~scale(.) %>% as.vector))
-#
-## Calculate mean of standardized variables
-#data <- data %>% mutate(SES = rowMeans(select(data, any_of(SES_vars)), na.rm = T))
-#
-## Check
-#summary(select(data,any_of(SES_vars), SES))
-
 
 
 # ------ Already available SES index
@@ -168,31 +140,40 @@ summary(select(data, IQ, centile_rank_IQ))
 
 ########################## PGIs cognitive ######################################
 
+# Read raw
+#pgi_cog3    <- readRDS(paste0(data_dir,"WLS/raw/pgi_cog.rds"))
+
+pgi_cog  <- read_dta(paste0(data_dir,"WLS/raw/PGIrepo_idpub_v1.1/PGIrepo_v1.1_idpub_shuffled.dta"))
+
+
+
+
 # Relabel and select the variables of interest
 pgi_cog <- pgi_cog %>%
   mutate(
     pgiID = paste(idpub,rtype, sep = "_")
-  )%>%
+  ) %>%
   select(
     pgiID,
-    pgi_education = pgs_ea3_gwas,
-    pc1  = pc1_shuffled,
-    pc2  = pc2_shuffled,
-    pc3  = pc3_shuffled,
-    pc4  = pc4_shuffled,
-    pc5  = pc5_shuffled,
-    pc6  = pc6_shuffled,
-    pc7  = pc7_shuffled,
-    pc8  = pc8_shuffled,
-    pc9  = pc9_shuffled,
-    pc10 = pc10_shuffled
+    pgi_education = pgi_easingle,
+    PC1  = pc1_PGI_shuffled,  PC11 = pc11_PGI_shuffled,
+    PC2  = pc2_PGI_shuffled,  PC12 = pc12_PGI_shuffled,
+    PC3  = pc3_PGI_shuffled,  PC13 = pc13_PGI_shuffled,
+    PC4  = pc4_PGI_shuffled,  PC14 = pc14_PGI_shuffled,
+    PC5  = pc5_PGI_shuffled,  PC15 = pc15_PGI_shuffled,
+    PC6  = pc6_PGI_shuffled,  PC16 = pc16_PGI_shuffled,
+    PC7  = pc7_PGI_shuffled,  PC17 = pc17_PGI_shuffled,
+    PC8  = pc8_PGI_shuffled,  PC18 = pc18_PGI_shuffled,
+    PC9  = pc9_PGI_shuffled,  PC19 = pc19_PGI_shuffled,
+    PC10 = pc10_PGI_shuffled, PC20 = pc20_PGI_shuffled
   )
+
+
+
 
 # Merge with main data
 
 df <- merge(data, pgi_cog, by="pgiID", all.x=TRUE)
-
-
 
 
 
@@ -216,6 +197,7 @@ df <- df %>%
 # There are a few cases that are not labelled properly and show 3 or 4 df, delete them
 df <- df[!(df$withinID %in% c(3, 4)), ]
 
+sapply(df, function(col) sum(is.na(col)))
 
 # re-code IDs and sex to avoid scaling them
 df <- df %>% 
@@ -237,7 +219,6 @@ full <- df %>%
     sex      = if_else(sex == 1, "male", "female"),
     SES_cont = SES,
     SES      = if_else(SES >= median(SES, na.rm = TRUE), "High SES", "Low SES")
-    #SES       = ntile(SES, 3)
   )
 
 full$SES <- factor(full$SES, levels = c("Low SES", "High SES"))
@@ -249,24 +230,24 @@ saveRDS(full, file="data/WLS/df.rds")
 
 
 
-# ----- SIBLINGS -----
-
-# At least two kids (if siblings analysis)
-siblings <- df %>% 
-  group_by(familyID) %>%
-  filter(n() >= 2) %>%
-  ungroup()
-
-
-# create SES binary 
-siblings %<>%
-  mutate(
-    sex      = if_else(sex == 1, "male", "female"),
-    SES_cont = SES,
-    SES      = if_else(SES >= median(SES, na.rm = TRUE), "High SES", "Low SES")
-  )
-
-# --- save siblings data
-saveRDS(siblings, file="data/WLS/siblings.rds")
+## ----- SIBLINGS -----
+#
+## At least two kids (if siblings analysis)
+#siblings <- df %>% 
+#  group_by(familyID) %>%
+#  filter(n() >= 2) %>%
+#  ungroup()
+#
+#
+## create SES binary 
+#siblings %<>%
+#  mutate(
+#    sex      = if_else(sex == 1, "male", "female"),
+#    SES_cont = SES,
+#    SES      = if_else(SES >= median(SES, na.rm = TRUE), "High SES", "Low SES")
+#  )
+#
+## --- save siblings data
+#saveRDS(siblings, file="data/WLS/siblings.rds")
 
 

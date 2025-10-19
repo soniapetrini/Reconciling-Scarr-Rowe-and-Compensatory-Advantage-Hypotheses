@@ -5,43 +5,40 @@ source("code/funs.R")
 ######## OPEN DATA ##############################
 #################################################
 
-######### MAIN DATASET #################
+# ------ MAIN DATASET
 
 # harmonized dataset (provided by ELSA)
 #elsa <- read_dta(paste0(data_dir,"ELSA/raw/h_elsa_g3.dta"))
-elsa <- readRDS(paste0(data_dir,"ELSA/raw/elsa.rds"))
+elsa <- readRDS(paste0(data_dir,"ELSA/raw/elsa.rds")) %>%
+  select(idauniq,
+         years_edu  = raedyrs_e, 
+         levels_edu = raeduc_e, 
+         sex        = ragender, 
+         birth_year = rabyear,
+         raracem)
 
-#######  PGI data ##################
+# ------ PGI data
 
-# polygenic index data (provided by ELSA)
-pgi <- read_dta(paste0(data_dir,"ELSA/raw/list_pgs_scores_elsa_2022.dta"))
- 
-# Merge
+pgi <- read_excel(paste0(data_dir,"ELSA/raw/genetic/elsa_pgirepo_v1.elsaid.xlsx")) %>%
+  select(idauniq, 
+         pgi_education = PGI_EA.single,
+         all_of(PC_vars))
 
-merged<-merge(elsa, pgi, by="idauniq")
 
-###### PRINCIPAL COMOPONENTS data ##################
-
-# principal components data associated to PGIs (provided by ELSA)
-pcs <- read_dta(paste0(data_dir, "ELSA/raw/principal_components_elsa_2022.dta"))
-
-# Merge
-
-merged<-merge(merged, pcs, by="idauniq")
-
-####### CHILDHOOD RECALL from third wave ##################
+# ------ CHILDHOOD RECALL from third wave
 
 # wave 3 information on life histories (provided by ELSA)
-childhood <- read_dta(paste0(data_dir,"ELSA/raw/wave_3_life_history_data.dta"))
+childhood <- read_dta(paste0(data_dir,"ELSA/raw/wave_3_life_history_data.dta")) %>%
+  select(idauniq, 
+         owners=raown, rooms=raroo, unemp=rsunemp, starts_with("rafac"), books=rabks)
+
+
+# ------ MERGE ALL
+
 
 # Merge
-
-merged<-merge(merged, childhood, by="idauniq", all.x=TRUE)
-
-# Rename
-
-data<-merged
-
+data <- merge(pgi, elsa, by="idauniq") %>%
+  merge(childhood, by="idauniq")
 
 
 
@@ -54,21 +51,21 @@ data<-merged
 
 # Years of education
 
-table(data$raedyrs_e) # original variable years of education
+table(data$years_edu) # original variable years of education
 
 # Information on the process of assignation of years of education
 # can be found in Table S1 of the Supplementary Materials
 
 data <- data %>%
   mutate(education = case_when(
-    raedyrs_e <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
-    raedyrs_e == 1 ~ 9, #14, 
-    raedyrs_e == 2 ~ 10, #15, 
-    raedyrs_e == 3 ~ 11, #16, 
-    raedyrs_e == 4 ~ 12, #17, 
-    raedyrs_e == 5 ~ 13, #18, 
-    raedyrs_e == 6 ~ 14, #19, 
-    TRUE ~ raedyrs_e  
+    years_edu <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
+    years_edu == 1 ~ 9, #14, 
+    years_edu == 2 ~ 10, #15, 
+    years_edu == 3 ~ 11, #16, 
+    years_edu == 4 ~ 12, #17, 
+    years_edu == 5 ~ 13, #18, 
+    years_edu == 6 ~ 14, #19, 
+    TRUE ~ years_edu  
   )) 
 
 table(data$education)
@@ -77,27 +74,27 @@ table(data$education)
 
 # Tertiary education (binary outcome)
 
-table(data$raeduc_e) # original variable 
+table(data$levels_edu) # original variable 
 
 data <- data %>%
   mutate(
-    High_school = case_when(
-      raeduc_e <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
-      raeduc_e %in% c(1) ~ 0,
-      raeduc_e %in% c(3,4,5) ~ 1,
-      TRUE ~ raeduc_e  
+    high_school = case_when(
+      levels_edu <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
+      levels_edu %in% c(1) ~ 0,
+      levels_edu %in% c(3,4,5) ~ 1,
+      TRUE ~ levels_edu  
     ),
     college = case_when(
-      raeduc_e <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
-      raeduc_e %in% c(1,3) ~ 0,
-      raeduc_e %in% c(4,5) ~ 1,
-      TRUE ~ raeduc_e  
+      levels_edu <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
+      levels_edu %in% c(1,3) ~ 0,
+      levels_edu %in% c(4,5) ~ 1,
+      TRUE ~ levels_edu  
     ),
-    graduate_school = case_when(
-      raeduc_e <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
-      raeduc_e %in% c(1,3,4) ~ 0,
-      raeduc_e %in% c(5) ~ 1,
-      TRUE ~ raeduc_e  
+    college = case_when(
+      levels_edu <= 0 ~ NA_real_,  # those who reported none qualification, cannot be assessed (14 individuals)
+      levels_edu %in% c(1,3,4) ~ 0,
+      levels_edu %in% c(5) ~ 1,
+      TRUE ~ levels_edu  
     )
   )
 
@@ -105,37 +102,6 @@ table(data$college)
 
 table(data$High_school)
 
-try <- select(data, education, High_school, college)
-
-
-##################################################
-######## PGI  ########################
-##################################################
-
-# PGI Educational Attainment
-
-# Explore the variable
-summary(data$EA_3)
-
-# Standardize PGI for an easier interpretation
-data <- data %>%
-  mutate(pgi_education = scale(EA_3),
-         pgi_cognitive = scale(GC_2015))
-
-
-
-##################################################
-######## COGNITIVE SKILLS  ########################
-##################################################
-
-
-# Explore the variable
-summary(data$r1imrc) # immediate word recall
-summary(data$r1verbf) # verbal fluency score
-
-# Rename
-data <- data %>%
-  rename(cognitive = r1verbf)
 
 
 
@@ -151,21 +117,25 @@ data <- data %>%
 ########## GENDER: male dummy #########
 
 # Explore 
-table(data$ragender)
+table(data$sex)
 
 # Recode
 data <- data %>% mutate(
-  sex = case_when(ragender == 1 ~ "male",
-                  ragender == 2 ~ "female"))
+  sex = case_when(sex == 1 ~ "male",
+                  sex == 2 ~ "female"))
 
 # Check
 table(data$sex)
 
 
 
-########## MIGRATION / ETHNICITY (note that only 4 respondents are non-white) ######### 
+########## MIGRATION / ETHNICITY (note that only 1 respondent is non-white) ######### 
 
 table(data$raracem) # coded by ELSA as 1 white, 4 non-white
+
+# Filter only white
+data <- data %>% filter(raracem==1)
+
 
 ########## SOCIOECONOMIC BACKGROUND #########
 
@@ -175,20 +145,20 @@ table(data$raracem) # coded by ELSA as 1 white, 4 non-white
 
 data <- data %>%
          # 1. House ownership
-         mutate(owners = case_when(raown < 0  ~ NA_real_,
-                                   raown == 1 ~ 1,
+         mutate(owners = case_when(owners < 0  ~ NA_real_,
+                                   owners == 1 ~ 1,
                                    TRUE       ~ 0),
          # 2. Number of rooms
-         rooms = if_else(raroo < 0, NA_real_, raroo),
+         rooms = if_else(rooms < 0, NA_real_, rooms),
          # 3. Facilities
          across(starts_with("rafac"), ~if_else(. <= -1, NA_real_, .)),
          facilities = rowSums(select(., starts_with("rafac")), na.rm = TRUE),
          # 4. Unemployed parents
-         unemp = case_when(rsunemp < 0  ~ NA_real_,
-                           rsunemp == 1 ~ 1,
+         unemp = case_when(unemp < 0  ~ NA_real_,
+                           unemp == 1 ~ 1,
                            TRUE         ~ 0),
          # 5. Number of books
-         books = if_else(rabks < 0, NA_real_, rabks)
+         books = if_else(books < 0, NA_real_, books)
          )
   
 
@@ -204,17 +174,19 @@ SES_PCA_vars <- c("books", "unemp", "facilities", "rooms", "owners")
 
 # Select variables
 temp <- select(data, 
-               id=idauniq, 
-               birth_year = rabyear, sex, 
+               id = idauniq, 
+               birth_year, sex, 
                pgi_education,
-               pgi_cognitive,
                any_of(OUTCOMES),
                any_of(SES_PCA_vars),
                any_of(PC_vars))
 
+# Check missings
+sapply(temp, function(col) sum(is.na(col)))
+
 # Complete information
 temp <- na.omit(temp)  
-# N = 3748
+# N = 3428
 
 
 
@@ -257,12 +229,13 @@ merged <- merge(temp, pcs, by="id", all.x=TRUE)
 
 
 
+####  Constructed SES ###
 
 # Binary SES
 data <- merged %>%
   mutate(
     SES_cont = SES,
-    SES      = if_else(SES >= median(SES, na.rm = TRUE), "High SES", "Low SES")
+    SES      = if_else(SES > median(SES, na.rm = TRUE), "High SES", "Low SES")
   )
 
 # Fix levels
@@ -271,6 +244,14 @@ data$SES <- factor(data$SES, levels = c("Low SES", "High SES"))
 
 # Select final sample
 data <- data %>% select(-any_of(SES_PCA_vars))
+
+
+
+
+#####  Filter age ###
+#
+#data <- filter(data, birth_year >= 1933)
+
 
 
 saveRDS(data, file="data/ELSA/df.rds")
