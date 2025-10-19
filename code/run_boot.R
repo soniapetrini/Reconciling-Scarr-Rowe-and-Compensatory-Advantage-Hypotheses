@@ -13,7 +13,6 @@ fun_preds <- 0.5
 n_boot    <- 1000
 datasets  <- c("ELSA","WLS")
 outcomes  <- c("college", "high_school")
-outcomes  <- c("college")
 predictor <- "pgi_education"
 metrics   <- c("TPR","TNR","FPR","FNR")
 

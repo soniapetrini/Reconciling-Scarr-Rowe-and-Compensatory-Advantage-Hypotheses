@@ -14,29 +14,24 @@ fun_pred  <- 0.5
 n_boot    <- 1000
 predictor <- "pgi_education"
 outcomes  <- c("high_school","college")
-outcomes  <- c("college")
 datasets  <- c("ELSA","WLS")
 
 
 results <- lapply(outcomes, function(Outcome) {
   
   # Read WLS and ELSA results
-  results_other <- lapply(datasets, function(ds) {
+  results <- lapply(datasets, function(ds) {
     results <- readRDS(paste0("results/",ds,"_",Outcome,"_",fun_pred,"_",n_boot,".rsd"))
     results %>% mutate(dataset = ds) 
       
-  })
+  }) %>% bind_rows()
   
   # Add Add Health manually 
-  results_AH <- if (fun_pred == 0.5) {
-                  results_AH_median %>% filter(outcome == Outcome)
-                } else if (fun_pred == "no middle") {
-                  results_AH_no_middle %>% filter(outcome == Outcome)
-                } else {break}
+  results_AH <- results_AH_terciles %>% filter(outcome == Outcome)
   
   
   # Combine all datasets
-  results <- bind_rows(results_other, results_AH)
+  results <- bind_rows(results, results_AH)
   
   # Convert to 100%
   results <- results %>% 
@@ -45,7 +40,7 @@ results <- lapply(outcomes, function(Outcome) {
   # Set labels
   results <- results %>% 
     mutate(status  = ifelse(high_OUT==1, outcome.labs[Outcome], neg.outcome.labs[Outcome]),
-           group   = factor(group, levels=c("Low SES", "High SES")),
+           group   = factor(group, levels=SES.groups),
            dataset = factor(dataset, levels=c("WLS", "ELSA","AH")))
   
   # Return
@@ -58,8 +53,8 @@ results <- lapply(outcomes, function(Outcome) {
 # Keep p-values and adjust
 pvalues <- results %>% 
   filter(metric %in% c("FNR", "FPR")) %>%
-  filter(group=="High SES") %>%
-  select(dataset, outcome, status, metric, p_value, stars) %>% 
+  filter(group!=SES.groups[2]) %>%
+  select(dataset, outcome, group, status, metric, p_value, stars) %>% 
   mutate(p_value.adj = p.adjust(p_value, method = "holm"),
          stars.adj   = add_stars(p_value.adj))
 pvalues
@@ -72,26 +67,48 @@ pvalues
 # =========================================================
 
 
+
+
 # Assumes that p-values have been adjusted in previous code:
 
 lapply(outcomes, function(Outcome) {
   
-  lapply(c("WLS","ELSA", "AH"), function(ds) {
+  lapply(c("WLS","ELSA","AH"), function(ds) {
     
-    # Correct stars
+    # Filter results
+    res <- results %>%
+      filter(dataset == ds, outcome == Outcome) 
+    
+    # Filter pvalues
     pvalues_ds <- pvalues %>%
       filter(dataset == ds, outcome == Outcome) %>% 
-      select(dataset, outcome, status, stars.adj)
-    res        <- merge(results, pvalues_ds, by=c("dataset","outcome","status"))
+      select(dataset, outcome, group, status, stars.adj)
+    res  <- left_join(res, pvalues_ds, by=c("dataset","outcome","group","status"))
     
     # Plot
     plot_perc(res)
     
     # Save
-    ggsave(paste0("plots/",ds,"_",Outcome,"_",fun_pred,".pdf"), width = 7, height =7)
-  
+    ggsave(paste0("plots/",ds,"_",Outcome,"_",fun_pred,"_terciles.pdf"), width = 8, height =7)
+    
   })
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

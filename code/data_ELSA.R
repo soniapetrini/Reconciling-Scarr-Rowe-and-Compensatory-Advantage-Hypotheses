@@ -231,26 +231,24 @@ merged <- merge(temp, pcs, by="id", all.x=TRUE)
 
 ####  Constructed SES ###
 
-# Binary SES
+# Terciles SES
 data <- merged %>%
   mutate(
     SES_cont = SES,
-    SES      = if_else(SES > median(SES, na.rm = TRUE), "High SES", "Low SES")
+    #SES      = if_else(SES > median(SES, na.rm = TRUE), "High SES", "Low SES")
   )
+
+data %<>% mutate(
+  SES = ntile(SES_cont, 3)
+)
+
 
 # Fix levels
 table(data$SES)
-data$SES <- factor(data$SES, levels = c("Low SES", "High SES"))
+data$SES <- factor(data$SES, levels = c(1,2,3), labels= SES.groups)
 
 # Select final sample
 data <- data %>% select(-any_of(SES_PCA_vars))
-
-
-
-
-#####  Filter age ###
-#
-#data <- filter(data, birth_year >= 1933)
 
 
 

@@ -1,4 +1,3 @@
-rm(list=ls())
 setwd("~/Library/Mobile Documents/com~apple~CloudDocs/University/UNIL/projects/Reconciling-Scarr-Rowe-and-Compensatory-Advantage-Hypotheses")
 
 
@@ -46,6 +45,7 @@ PC_vars  = paste0("PC",seq(1:20))
 METRICS  = c("NPV","PPV")
 DATASETS = c("WLS","ELSA","Add Health")
 OUTCOMES = c("education","high_school","college_enroll","college","graduate_school")
+SES.groups <- c("SES Q1", "SES Q2", "SES Q3")
 
 # PGI thresholding 
 bottom_pgi    <- 0.40
@@ -59,6 +59,10 @@ threshold.set <- c(0.2,0.4,0.6,0.8)
 # =========================================================
 
 SES.colors <- c("Low SES"  = "#F0AE05", "High SES" = "#52d8da")
+
+SES.colors = c("#F0AE05", "#A7C974", "#52D8DA")
+
+names(SES.colors) <- SES.groups
 
 metrics.labs <- c("NPV" = "Negative Predictive\nValue",
                   "PPV" = "Positive Predictive\nValue",
@@ -271,29 +275,34 @@ calculate_metrics <- function(data, metric) {
 # Main function 
 compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_pred, R, fun_out=NULL, resid=T) {
   
+    
   boot_fun <- function(data, indices) {
     
     # Boot sample
     data <- data[indices,]
     
-    # Create SES var based on boot sample median
-    data <- data %>%
-      mutate(SES = if_else(SES_cont >= median(SES_cont), "High SES", "Low SES"))
-  
+    # Create SES var based on boot sample terciles
+    data %<>% mutate(
+      SES = ntile(SES_cont, 3)
+    )
+    
     # Filter by group
-    High_data <- filter(data, SES == "High SES")
-    Low_data  <- filter(data, SES == "Low SES")
+    data1 <- filter(data, SES == 1)
+    data2 <- filter(data, SES == 2)
+    data3 <- filter(data, SES == 3)
     
     # Create binary variables for predictor and outcome 
-    High_data <- dichotomize(High_data, outcome, predictor, fun_pred, fun_out,resid)
-    Low_data  <- dichotomize(Low_data, outcome, predictor, fun_pred, fun_out,resid)
+    data1 <- dichotomize(data1, outcome, predictor, fun_pred, fun_out, resid)
+    data2 <- dichotomize(data2, outcome, predictor, fun_pred, fun_out, resid)
+    data3 <- dichotomize(data3, outcome, predictor, fun_pred, fun_out, resid)
     
     # Compute all required metrics
     all_metrics <- lapply(metrics, function(metric) {
       # Compute required metric on each group
-      metric_Low  <- calculate_metrics(Low_data, metric)$metric
-      metric_High <- calculate_metrics(High_data, metric)$metric
-      c(metric_Low, metric_High, metric_Low-metric_High)
+      metric_1 <- calculate_metrics(data1, metric)$metric
+      metric_2 <- calculate_metrics(data2, metric)$metric
+      metric_3 <- calculate_metrics(data3, metric)$metric
+      c(metric_1, metric_2, metric_3, metric_1-metric_2, metric_2-metric_3)
     })
   
     # Return estimates
@@ -311,34 +320,35 @@ compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_pr
   res <- lapply(seq_along(metrics), function(i) {
     
     # Column indices for this metric
-    idx <- (i - 1) * 3 + 1:3
+    idx <- (i - 1) * 5 + 1:5
     
     # Extract bootstrapped estimates
     boot_mat <- boot_runs[, idx]
-    colnames(boot_mat) <- c("Low SES", "High SES", "diff")
+    colnames(boot_mat) <- c(SES.groups, "diff_12","diff_23")
     
     # remove iterations if na
     boot_mat <- na.omit(boot_mat)
     
     # Point estimate
-    est <- colMeans(boot_mat)[c("Low SES", "High SES")]
+    est <- colMeans(boot_mat)[SES.groups]
     
     # CIs from bootstrapped samples
-    ci_low  <- apply(boot_mat[, c("Low SES", "High SES")], 2, quantile, probs = 0.025)
-    ci_high <- apply(boot_mat[, c("Low SES", "High SES")], 2, quantile, probs = 0.975)
+    ci_low  <- apply(boot_mat[, SES.groups], 2, quantile, probs = 0.025)
+    ci_high <- apply(boot_mat[, SES.groups], 2, quantile, probs = 0.975)
     
     # p-value for difference
-    p_val <- 2 * min(mean(boot_mat$diff > 0), mean(boot_mat$diff < 0))  # two-tailed
+    p_val_12 <- 2 * min(mean(boot_mat$diff_12 > 0), mean(boot_mat$diff_12 < 0))  # two-tailed
+    p_val_23 <- 2 * min(mean(boot_mat$diff_23 > 0), mean(boot_mat$diff_23 < 0))  # two-tailed
     
     # Return results
     data.frame(
-      metric    = rep(metrics[i], 2),
-      group     = c("Low SES", "High SES"),
-      value     = round(est[1:2], 2),
+      metric    = rep(metrics[i], 3),
+      group     = SES.groups,
+      value     = round(est[1:3], 2),
       ci_lower  = round(ci_low, 2),
       ci_upper  = round(ci_high, 2),
-      p_value   = rep(p_val, 2),
-      stars     = rep(add_stars(p_val), 2),
+      p_value   = c(p_val_12, NA, p_val_23),
+      stars     = c(add_stars(p_val_12), NA, add_stars(p_val_23)),
       group_var = "SES",
       outcome   = outcome,      # Replace with actual outcome variable
       predictor = predictor     # Replace with actual predictor
@@ -354,15 +364,12 @@ compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_pr
     mutate(high_OUT = ifelse(metric %in% c("TPR","FNR"), 1, 0))
   
   # Add sample size by group
-  N_groups <- lapply(c("Low SES", "High SES"), function(g) {
-    group_data <- filter(data, SES == g)
-    group_data <- dichotomize(group_data,outcome,predictor,fun_pred, fun_out)
-    group_data %>% group_by(high_OUT) %>% 
-      summarise(n = n()) %>% mutate(group = g)
-  }) %>% bind_rows
+  N_groups <- data %>%
+    group_by(group=SES, high_OUT=get(outcome)) %>%
+    summarise(n = n())
   
   # Combine and return
-  merge(res,N_groups)
+  left_join(res,N_groups, by=c("group", "high_OUT"))
 }
 
 
@@ -372,88 +379,12 @@ compute_group_metrics_boot <- function(data, metrics, outcome, predictor, fun_pr
 
 # ~~~~~ 🦄 VISUALIZATION ~~~~~
 
-plot_rates <- function(results) {
-  
-  # Get the available metrics from your data
-  available_metrics <- unique(results$metric)
-  
-  # Outcome labels
-  out.lab.pos <- outcome.labs[results$outcome]
-  out.lab.neg <- neg.outcome.labs[results$outcome]
-  results <- results %>% mutate(out = ifelse(metric=="TPR", out.lab.pos, out.lab.neg))
-  
-  
-  # Convert to factors for plotting
-  results <- results %>%
-    mutate(metric = factor(metric, levels = available_metrics, labels = metrics.labs[available_metrics]),
-           group  = factor(group, levels=c("Low SES","High SES")))
-
-  
-  # Create the plot
-  ggplot(results, aes(x = metric, y = value, group=group)) +
-    geom_bar(aes(fill=group), stat="identity", position = position_dodge(width = 0.6), width = 0.6) +
-    geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), 
-                  color="#747170",
-                  position = position_dodge(width = 0.6),
-                  width = 0.15, linewidth = 1) +
-    # Axis labels
-    labs(x="", y="") +
-    # Add value labels left
-    geom_text(data=filter(results, group == "Low SES"),
-              aes(label = sprintf("%.2f", value)), 
-              position = position_dodge(width = 0.6),
-              vjust = -2.5,
-              hjust = 1.5,
-              size = 4,
-              color = "black") +
-    # Add value label right
-    geom_text(data=filter(results, group == "High SES"),
-              aes(label = sprintf("%.2f", value)), 
-              position = position_dodge(width = 0.6),
-              vjust = -2.5,
-              hjust = -0.5,
-              size = 4,
-              color = "black") +
-    # Add stars
-    geom_text(aes(y = y_position, label = stars),
-              color = "black",
-              size = 8,
-              position = position_dodge(width = 0)) +
-    # Add secondary axis
-    scale_y_continuous(
-                       #"P (Low PGI | High EA)\n", 
-                       #sec.axis = sec_axis(~ . * 1, 
-                       #                    name = "P (High PGI | Low EA)\n",
-                       #                    breaks = seq(0, 1, 0.2)),
-                       limits = c(0, 1), 
-                       breaks = seq(0, 1, 0.2),
-                       labels = scales::label_number(accuracy = 0.1)
-                       ) +
-    theme_minimal() +
-    theme(text = element_text(size=15),
-          axis.title.y = element_text(size=12),
-          legend.position = "bottom",
-          legend.spacing.x = unit(20.0, 'cm')
-          ) +
-    scale_fill_discrete(name="") +
-    facet_wrap(~out)
-
-}
-
-
-
 plot_perc <- function(results, show_metrics=c("FNR", "FPR"), adjust_pvalues=T) {
   
-  # Outcome labels
-  #out.lab.pos <- outcome.labs[unique(results$outcome)]
-  #out.lab.neg <- neg.outcome.labs[unique(results$outcome)]
-  out.lab.pos <- "Completed"
-  out.lab.neg <- "Not completed"
-
   # Add labels for predicted value (PGI), and real value (EA)
   results <- results %>% 
-    mutate(real = case_when(metric %in% c("TPR","FNR") ~ out.lab.pos,
-                            metric %in% c("TNR","FPR") ~ out.lab.neg,
+    mutate(real = case_when(metric %in% c("TPR","FNR") ~ "Completed",
+                            metric %in% c("TNR","FPR") ~ "Not completed",
                             TRUE            ~ NA_character_)
     )
   
@@ -468,13 +399,27 @@ plot_perc <- function(results, show_metrics=c("FNR", "FPR"), adjust_pvalues=T) {
   # Adjust stars
   if(adjust_pvalues) counts$stars <- counts$stars.adj
   
-  # Remove stars for a random group
+  # Remove stars for group 2
   counts <- counts %>%
-    mutate(stars = ifelse(group == "High SES", "", stars))
+    mutate(stars = ifelse(group == "SES_2", "", stars))
   
   # Convert to factors for plotting
   counts <- counts %>%
-    mutate(group = factor(group, levels = c("Low SES", "High SES")))
+    mutate(group = factor(group, levels = SES.groups))
+  
+  # x position of stars
+  counts <- counts %>%
+    mutate(
+      x_pos_stars = if_else(group==SES.groups[1],1.5, 2.5),
+      x_start = if_else(group==SES.groups[1],1, 2),
+      x_end   = if_else(group==SES.groups[1],2, 3),
+      y_start = case_when(
+        (group==SES.groups[1] & real=="Completed") ~ 70,
+        (group==SES.groups[1] & real=="Not completed") ~ 75,
+        (group==SES.groups[3] & real=="Completed") ~ 75,
+        (group==SES.groups[3] & real=="Not completed") ~ 70
+        )
+      )
   
   # Plot  
   ggplot(counts, aes(fill=group, y=value, x=group, alpha=show)) + 
@@ -493,7 +438,7 @@ plot_perc <- function(results, show_metrics=c("FNR", "FPR"), adjust_pvalues=T) {
               size = 13,
               color = "#635856") +
     # Add stars
-    geom_text(aes(y=77, x=1.5, label = stars),
+    geom_text(aes(y=y_start+2, x=x_pos_stars, label = stars),
               color = "#635856", 
               size  = 13, inherit.aes = F) +
     # Add 0.5 line
@@ -502,16 +447,25 @@ plot_perc <- function(results, show_metrics=c("FNR", "FPR"), adjust_pvalues=T) {
                alpha=0.6, linewidth=1) +
     # Add horizontal comparison lines between groups
     geom_segment(data=filter(counts, stars != ""),
-                 x = 1, xend = 2, y = 75, yend = 75,
+                 aes(x    = x_start,
+                     xend = x_end,
+                     y = y_start,
+                     yend = y_start),
                  color = "#635856", linewidth = 0.5,
                  inherit.aes = FALSE) +
     # Add bracket ends (optional)
     geom_segment(data=filter(counts, stars != ""),
-                 x = 1, xend = 1, y = 73, yend = 75,
+                 aes(x    = x_start,
+                     xend = x_start,
+                     y = y_start-2,
+                     yend = y_start),
                  color = "#635856", linewidth = 0.5,
                  inherit.aes = FALSE) +
     geom_segment(data=filter(counts, stars != ""),
-                 x = 2, xend = 2, y = 73, yend = 75,
+                 aes(x    = x_start+1,
+                     xend = x_start+1,
+                     y = y_start-2,
+                     yend = y_start),
                  color = "#635856", linewidth = 0.5,
                  inherit.aes = FALSE) +
     #theme_minimal() +
@@ -533,6 +487,7 @@ plot_perc <- function(results, show_metrics=c("FNR", "FPR"), adjust_pvalues=T) {
     ) 
   
 }
+
 
 
 

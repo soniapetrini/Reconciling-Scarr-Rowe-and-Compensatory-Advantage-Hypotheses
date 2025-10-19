@@ -213,15 +213,18 @@ n_distinct(df$ID)
 n_distinct(df$pgiID)
 n_distinct(df$familyID)
 
-# create SES binary 
+# create SES terciles 
 full <- df %>%
   mutate(
     sex      = if_else(sex == 1, "male", "female"),
-    SES_cont = SES,
-    SES      = if_else(SES >= median(SES, na.rm = TRUE), "High SES", "Low SES")
+    SES_cont = SES
   )
 
-full$SES <- factor(full$SES, levels = c("Low SES", "High SES"))
+full %<>% mutate(
+  SES = ntile(SES_cont, 3)
+)
+
+full$SES <- factor(full$SES, levels = c(1,2,3), labels= SES.groups)
 
 
 # save full data
