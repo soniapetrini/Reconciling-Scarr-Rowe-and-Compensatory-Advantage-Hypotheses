@@ -4,34 +4,47 @@
 
 # Median PGI (n_boot=10000, "median")
 results_AH_median <- data.frame(
-  group = c("High SES", "High SES", "High SES", "High SES",
-            "Low SES", "Low SES", "Low SES", "Low SES",
-            "High SES", "High SES", "High SES", "High SES",
-            "Low SES", "Low SES", "Low SES", "Low SES"),
-  high_OUT = c(0,0,1,1, 0,0,1,1, 0,0,1,1, 0,0,1,1),
+  group = c("High SES","High SES","High SES","High SES",
+            "Low SES","Low SES","Low SES","Low SES",
+            "High SES","High SES","High SES","High SES",
+            "Low SES","Low SES","Low SES","Low SES"),
+  high_OUT = c(0,0,1,1,
+               0,0,1,1,
+               0,0,1,1,
+               0,0,1,1),
   metric = c("FPR","TNR","FNR","TPR",
              "FPR","TNR","FNR","TPR",
              "FPR","TNR","FNR","TPR",
              "FPR","TNR","FNR","TPR"),
-  value = c(0.08,0.92,0.50,0.50, 0.28,0.72,0.49,0.51,
-            0.31,0.69,0.38,0.62, 0.44,0.56,0.30,0.70),
-  ci_lower = c(0.00,0.75,0.49,0.50, 0.20,0.63,0.49,0.50,
-               0.28,0.66,0.36,0.61, 0.42,0.55,0.26,0.66),
-  ci_upper = c(0.25,1.00,0.51,0.50, 0.34,0.80,0.49,0.52,
-               0.34,0.72,0.40,0.64, 0.48,0.58,0.34,0.74),
-  p_value = c(0.0304,0.0304,0.0304,0.0304,
-              0.0028,0.0028,0.0028,0.0028,
-              0.0004,0.0004,0.0004,0.0004,
-              0.0004,0.0004,0.0004,0.0004),
+  value = c(0.08,0.92,0.50,0.50,
+            0.28,0.72,0.49,0.51,
+            0.31,0.69,0.38,0.62,
+            0.44,0.56,0.30,0.70),
+  ci_lower = c(0.00,0.75,0.49,0.50,
+               0.20,0.63,0.48,0.51,
+               0.28,0.66,0.36,0.61,
+               0.42,0.55,0.26,0.66),
+  ci_upper = c(0.25,1.00,0.50,0.51,
+               0.37,0.80,0.49,0.52,
+               0.34,0.72,0.39,0.64,
+               0.45,0.58,0.34,0.74),
+  p_value = c(0.0304,0.0304,0.0028,0.0028,
+              0.0304,0.0304,0.0028,0.0028,
+              0.0000,0.0000,0.0004,0.0004,
+              0.0000,0.0000,0.0004,0.0004),
   stars = c("*","*","**","**",
-            "*","*","**","***",
+            "*","*","**","**",
             "***","***","***","***",
             "***","***","***","***"),
-  group_var = rep("SES", 16),
-  outcome = c(rep("high_school", 8), rep("college", 8)),
-  predictor = rep("pgi_education", 16),
-  n = c(19,19,2013,2013,1894,1894,1894,1894,802,802,123,123,1539,1539,470,470)
+  group_var = rep("SES",16),
+  outcome = c(rep("high_school",8),rep("college",8)),
+  predictor = rep("pgi_education",16),
+  n = c(19,19,2013,2013,
+        115,115,1894,1894,
+        802,802,1230,1230,
+        1539,1539,470,470)
 )
+
 
 
 results_AH_median <- results_AH_median %>% mutate(dataset="AH")
@@ -293,8 +306,6 @@ results_AH_thresholds_college <- data.frame(
 
 
 results_AH_thresholds <- bind_rows(results_AH_thresholds_hs, results_AH_thresholds_college)
-
-
 
 
 

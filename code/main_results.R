@@ -10,11 +10,11 @@ source("code/funs.R")
 
 
 
-fun_pred  <- 0.5
-n_boot    <- 1000
+fun_pred  <- "no middle"
+n_boot    <- 10000
 predictor <- "pgi_education"
-outcomes  <- c("high_school","college")
 outcomes  <- c("college")
+outcomes  <- c("high_school","college")
 datasets  <- c("ELSA","WLS")
 
 
@@ -171,15 +171,13 @@ datasets  <- c("WLS","ELSA","AH")
 
 results <- lapply(outcomes, function(Outcome) {
   
-  lapply(datasets, function(ds) {
+  res <- lapply(datasets, function(ds) {
     
     ######### Get results for dataset  ######### 
     
     if (ds == "AH") {
       results <- results_AH_gender %>% filter(outcome==Outcome) %>%
-        mutate(status = ifelse(high_OUT==1, outcome.labs[Outcome], neg.outcome.labs[Outcome]),
-               sex     = factor(sex,     levels = c("female",  "male"),
-                                labels = c("women",  "men")))
+        mutate(status = ifelse(high_OUT==1, outcome.labs[Outcome], neg.outcome.labs[Outcome]))
     } else {
       
     # Read by gender
@@ -188,9 +186,7 @@ results <- lapply(outcomes, function(Outcome) {
       readRDS(paste0("results/gender/",ds,"_",Outcome,"_",fun_pred,"_",n_boot,"_",which_sex,".rsd")) %>% 
         mutate(dataset = ds, sex = which_sex) %>% 
         mutate(status  = ifelse(high_OUT==1, outcome.labs[Outcome], neg.outcome.labs[Outcome]),
-               group   = factor(group,   levels = c("Low SES", "High SES")),
-               dataset = factor(dataset, levels = c("WLS",     "ELSA")),
-               sex     = factor(sex,     levels = c("female",  "male")))
+               group   = factor(group,   levels = c("Low SES", "High SES")))
     })
     # Both sexes
     results <- bind_rows(results_sex) 
@@ -199,7 +195,11 @@ results <- lapply(outcomes, function(Outcome) {
     # Return
     results
     
-  }) %>% bind_rows
+  }) 
+  res %>% bind_rows %>% mutate(
+    dataset = factor(dataset, levels = c("WLS",     "ELSA", "AH")),
+    sex     = factor(sex,     levels = c("female",  "male"))
+    )
   
 }) %>% bind_rows
   
@@ -279,7 +279,7 @@ predictor <- "pgi_education"
 n_boot    <- 10000
 
 
-results <- lapply(outcomes, function(Outcome) {
+results <- lapply(OUTCOMES, function(Outcome) {
     
   lapply(c("WLS","ELSA","AH"), function(ds) {
     
@@ -327,7 +327,7 @@ pvalues
     
     ######### Plot ######### 
 
-p <- lapply(outcomes, function(Outcome) {
+p <- lapply(OUTCOMES, function(Outcome) {
   
   p <- lapply(c("WLS","ELSA","AH"), function(ds) {
     

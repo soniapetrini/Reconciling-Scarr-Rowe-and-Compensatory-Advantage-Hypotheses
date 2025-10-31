@@ -87,15 +87,17 @@ tapply(all_df$birth_year, all_df$dataset, summary)
 
 
 # Summary table
-ds <- "WLS"
+ds <- "ELSA"
 get_data(ds) %>%
   group_by(SES) %>%
   summarise(n = n(),
             high_school = mean(high_school),
             college = mean(college),
             share_female = mean(sex == "female", na.rm = TRUE),
+            birth_year_min = as.integer(min(birth_year)),
             birth_year_m = as.integer(mean(birth_year)),
             birth_year_sd = sd(birth_year),
+            birth_year_max = as.integer(max(birth_year))
             ) %>% xtable()
 
 

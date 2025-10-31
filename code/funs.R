@@ -45,7 +45,7 @@ DEMO     = c("birth_year", "sex")
 PC_vars  = paste0("PC",seq(1:20))
 METRICS  = c("NPV","PPV")
 DATASETS = c("WLS","ELSA","Add Health")
-OUTCOMES = c("education","high_school","college_enroll","college","graduate_school")
+OUTCOMES = c("high_school","college")
 
 # PGI thresholding 
 bottom_pgi    <- 0.40
