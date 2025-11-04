@@ -8,7 +8,6 @@ setwd("~/Library/Mobile Documents/com~apple~CloudDocs/University/UNIL/projects/R
 # =========================================================
 source("code/funs.R")
 
-library(scales)
 
 predictor <- "pgi_education"
 
@@ -53,14 +52,15 @@ sapply(c("WLS","ELSA"), function(ds) {
     ylim(c(0, 0.42))
   
   # Save
-  ggsave(paste0("plots/",ds,"_PGIdensity.pdf"), width = 6, height =6)
+  ggsave(paste0("plots/",ds,"_PGIdensity.tiff"), 
+         width = 6, height =6, dpi=300)
 
 })
 
 
 
 # =========================================================
-#                    ✨ DESCRIPTIVES ✨   
+#                    ✨ SUMMARSY STATISTICS ✨   
 # =========================================================
 
 source("code/funs.R")
@@ -117,7 +117,8 @@ get_data(ds) %>%
         axis.ticks.y = element_blank()) +
   labs(x="birth year") +
   xlim(c(1905,1990)) 
-ggsave(paste0("plots/",ds,"_birth_year.png"), width = 6, height =2)
+ggsave(paste0("plots/",ds,"_birth_year.tiff"), 
+       width = 6, height =2, dpi=300)
 
 
 ds <- "WLS"
@@ -129,7 +130,8 @@ get_data(ds) %>%
         axis.ticks.y = element_blank()) +
   labs(x="birth year") +
   xlim(c(1905,1990))
-ggsave(paste0("plots/",ds,"_birth_year.png"), width = 6, height =2)
+ggsave(paste0("plots/",ds,"_birth_year.tiff"), 
+       width = 6, height =2, dpi=300)
 
 
 
@@ -150,7 +152,8 @@ rates_other <- lapply(c("WLS","ELSA"), function(ds) {
     group_by(SES) %>%
     summarise(n = n(),
               high_school = mean(high_school),
-              college = mean(college)) %>%
+              college = mean(college)
+              ) %>%
       mutate(dataset=factor(ds))
 }) %>% bind_rows
 
@@ -171,11 +174,15 @@ rates <- bind_rows(rates_other, rates_AH) %>%
 rates <- reshape2::melt(rates, id.vars=c("dataset","SES","n"), 
                         variable.name = "outcome")
 
+# Filter
+#rates <- rates %>% filter(outcome == "college")
+
 ggplot(rates, aes(x=dataset, y=value, fill=SES)) +
   geom_bar(stat="identity",position = "dodge") +
-  labs(y="Completion rate",x="") +
+  labs(y="",x="") +
   facet_wrap(~outcome, nrow=1, labeller=labeller(outcome=outcome.labs)) +
-  theme_minimal() +
+  theme_bw() +
+  ylim(c(0,1)) +
   scale_fill_manual(name="", values=SES.colors) +
   theme(
     legend.position = "bottom",
@@ -188,41 +195,10 @@ ggplot(rates, aes(x=dataset, y=value, fill=SES)) +
   )
 
 
-ggsave(paste0("plots/completion_rates.pdf"), width = 10, height =7)
+ggsave(paste0("plots/completion_rates.tiff"), width = 9, height =6)
 
 
 
-
-
-
-
-# Compute medians
-df <- get_data(ds)
-
-medians <- df %>%
-  group_by(sex) %>%
-  summarise(med = median(pgi_education, na.rm = TRUE))
-
-# Plot
-df %>% 
-  ggplot(aes(x = pgi_education, fill = sex)) +
-  geom_density(alpha = 0.6) +
-  geom_vline(data = medians, 
-             aes(xintercept = med, color = sex),
-             linetype = "dashed", linewidth = 1) +
-  #scale_fill_manual(name = "", values = fill_colors) +
-  #scale_color_manual(guide = "none", values = line_colors) +
-  labs(x = "PGI") +
-  theme_minimal() +
-  theme(
-    legend.position = "bottom",
-    text  = element_text(size = 20),
-    legend.text = element_text(size = 20),
-    panel.grid.minor = element_blank(),
-    panel.grid.major = element_blank()
-  ) +
-  xlim(c(-4, 4)) +
-  ylim(c(0, 0.42))
 
 
 

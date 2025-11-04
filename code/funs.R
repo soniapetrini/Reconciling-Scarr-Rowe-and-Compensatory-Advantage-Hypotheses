@@ -30,6 +30,7 @@ suppressPackageStartupMessages({
   library(parallel)
   library(readxl)
   library(modelsummary)
+  library(scales)
 })
 
 
