@@ -45,7 +45,7 @@ PC_vars  = paste0("PC",seq(1:20))
 METRICS  = c("NPV","PPV")
 DATASETS = c("WLS","ELSA","Add Health")
 OUTCOMES = c("education","high_school","college_enroll","college","graduate_school")
-SES.groups <- c("SES Q1", "SES Q2", "SES Q3")
+SES.groups <- c("SES T1", "SES T2", "SES T3")
 
 # PGI thresholding 
 bottom_pgi    <- 0.40

@@ -312,10 +312,10 @@ results_AH_terciles <- data.frame(
     "TPR","TPR","TPR","TNR","TNR","TNR"
   ),
   group = c(
-    "SES Q1","SES Q2","SES Q3","SES Q1","SES Q2","SES Q3",
-    "SES Q1","SES Q2","SES Q3","SES Q1","SES Q2","SES Q3",
-    "SES Q1","SES Q2","SES Q3","SES Q1","SES Q2","SES Q3",
-    "SES Q1","SES Q2","SES Q3","SES Q1","SES Q2","SES Q3"
+    "SES T1","SES T2","SES T3","SES T1","SES T2","SES T3",
+    "SES T1","SES T2","SES T3","SES T1","SES T2","SES T3",
+    "SES T1","SES T2","SES T3","SES T1","SES T2","SES T3",
+    "SES T1","SES T2","SES T3","SES T1","SES T2","SES T3"
   ),
   value = c(
     0.30,0.20,0.01,0.49,0.49,0.50,

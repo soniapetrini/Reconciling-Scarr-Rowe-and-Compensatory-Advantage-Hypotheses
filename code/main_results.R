@@ -89,7 +89,8 @@ lapply(outcomes, function(Outcome) {
     plot_perc(res)
     
     # Save
-    ggsave(paste0("plots/",ds,"_",Outcome,"_",fun_pred,"_terciles.pdf"), width = 8, height =7)
+    ggsave(paste0("plots/",ds,"_",Outcome,"_",fun_pred,"_terciles.tiff"),
+           width = 8, height =7, dpi=300)
     
   })
 })
