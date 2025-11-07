@@ -8,7 +8,7 @@ source("code/funs.R")
 #                     ✨ MAIN RESULTS  ✨
 # =========================================================
 
-fun_pred  <- 0.5
+fun_pred  <- "no middle"
 n_boot    <- 10000
 predictor <- "pgi_education"
 outcomes  <- c("high_school","college")
@@ -85,7 +85,7 @@ lapply(outcomes, function(Outcome) {
     plot_perc(res)
     
     # Save
-    ggsave(paste0("plots/",ds,"_",Outcome,"_",fun_pred,".tiff"), width = 7, height =7,dpi = 300)
+    ggsave(paste0("plots/",ds,"_",Outcome,"_",fun_pred,".pdf"), width = 7, height =7,dpi = 300)
   
   })
 })
@@ -233,7 +233,7 @@ p <- lapply(outcomes, function(Outcome) {
     plot_perc(results_ds) + facet_grid(sex~real, scales="free_x")
     
     # Save
-    ggsave(paste0("plots/",ds,"_",Outcome,"_gender.tiff"), width = 8, height =10,dpi=300)
+    ggsave(paste0("plots/",ds,"_",Outcome,"_gender.pdf"), width = 8, height =10,dpi=300)
 
   })
   
@@ -322,7 +322,7 @@ pvalues
     
     
     
-    ######### Plot ######### 
+######### Plot ######### 
 
 p <- lapply(OUTCOMES, function(Outcome) {
   
@@ -372,7 +372,7 @@ p <- lapply(OUTCOMES, function(Outcome) {
       scale_x_continuous(breaks = unique(results_ds$threshold))
     
     # Save
-    ggsave(paste0("plots/",ds,"_",Outcome,"_all_thresholds.tiff"), 
+    ggsave(paste0("plots/",ds,"_",Outcome,"_all_thresholds.pdf"), 
            width = 12, height =6, dpi=300)
   
   })
